@@ -1,7 +1,6 @@
 plugins {
     id("com.android.application")
-    id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("org.jetbrains.kotlin.android")
     id("dev.flutter.flutter-gradle-plugin")
 }
 
@@ -11,9 +10,10 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // ✅ เปิดการรองรับ Java 8+ APIs (Desugaring)
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
-        coreLibraryDesugaringEnabled = true  // ✅ เปิดใช้งาน desugaring
     }
 
     kotlinOptions {
@@ -35,13 +35,12 @@ android {
     }
 }
 
-flutter {
-    source = "../.."
+dependencies {
+    // ✅ ใช้ syntax ของ Kotlin DSL
+    implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }
 
-dependencies {
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
-
-    // ✅ เพิ่มบรรทัดนี้เพื่อแก้ปัญหา flutter_local_notifications
-    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
+flutter {
+    source = "../.."
 }
