@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:flutter/foundation.dart';
 
 class HeartBleService {
   static const String defaultDeviceName = 'HeartSense-ESP32';
@@ -9,7 +10,7 @@ class HeartBleService {
   static const String defaultNotifyCharUuid =
       '6E400003-B5A3-F393-E0A9-E50E24DCCA9E';
   static const String defaultWriteCharUuid =
-      '6E400002-B5A3-F393-E0A9-E50E24DCCA9E'; // ✅ เพิ่ม write characteristic UUID
+      '6E400002-B5A3-F393-E0A9-E50E24DCCA9E';
 
   HeartBleService({
     this.targetDeviceName = defaultDeviceName,
@@ -24,18 +25,16 @@ class HeartBleService {
   final String serviceUuid;
   final String notifyCharUuid;
   final String writeCharUuid;
-
   final Duration scanTimeout;
   final Duration connectTimeout;
 
   BluetoothDevice? _device;
   BluetoothCharacteristic? _notifyChar;
-  BluetoothCharacteristic? _writeChar; // ✅ เก็บ characteristic สำหรับส่งคำสั่ง
+  BluetoothCharacteristic? _writeChar;
   Stream<(int bpm, double temp)>? dataStream;
 
   StreamSubscription<List<ScanResult>>? _scanSub;
   StreamSubscription<List<int>>? _notifySub;
-
   bool _connected = false;
 
   // ------------------------ Helper ------------------------
@@ -45,13 +44,12 @@ class HeartBleService {
   bool _advHasService(AdvertisementData adv, String svcUuid) {
     final target = svcUuid.toUpperCase();
     for (final u in adv.serviceUuids) {
-      final s = u.toString().toUpperCase();
-      if (s == target) return true;
+      if (u.toString().toUpperCase() == target) return true;
     }
     return false;
   }
 
-  // ------------------- Connect / Subscribe -------------------
+  // ------------------- Scan & Connect -------------------
   Future<void> startScanAndConnect() async {
     if (_connected && _device != null) return;
 
@@ -61,8 +59,8 @@ class HeartBleService {
     }
 
     final completer = Completer<void>();
-
     await FlutterBluePlus.startScan(timeout: scanTimeout);
+
     _scanSub = FlutterBluePlus.scanResults.listen((results) async {
       for (final r in results) {
         final adv = r.advertisementData;
@@ -77,7 +75,14 @@ class HeartBleService {
           try {
             await FlutterBluePlus.stopScan();
             _device = r.device;
-            await _device!.connect(timeout: connectTimeout, autoConnect: false);
+
+            // ✅ ตรวจสอบสถานะก่อนเชื่อมต่อ
+            final state = await _device!.connectionState.first;
+            if (state != BluetoothConnectionState.connected) {
+              await _device!.connect();
+            }
+
+            debugPrint('✅ Connected to ${_device!.platformName}');
             _connected = true;
 
             await _discoverAndSubscribe();
@@ -85,6 +90,7 @@ class HeartBleService {
             if (!completer.isCompleted) completer.complete();
             break;
           } catch (e) {
+            debugPrint('❌ Connect failed: $e');
             _connected = false;
             _device = null;
             await FlutterBluePlus.startScan(timeout: scanTimeout);
@@ -106,14 +112,13 @@ class HeartBleService {
     return completer.future.whenComplete(_cancelScanSub);
   }
 
-  // ------------------- Discover Characteristics -------------------
+  // ------------------- Discover & Subscribe -------------------
   Future<void> _discoverAndSubscribe() async {
     if (_device == null) {
       throw StateError('No device found to discover services');
     }
 
     final services = await _device!.discoverServices();
-
     BluetoothCharacteristic? notifyChar;
     BluetoothCharacteristic? writeChar;
 
@@ -132,16 +137,15 @@ class HeartBleService {
     if (notifyChar == null) {
       throw StateError('Notify characteristic not found on device');
     }
+
     _notifyChar = notifyChar;
     _writeChar = writeChar;
-
     await _notifyChar!.setNotifyValue(true);
 
-    // ✅ แปลงข้อมูลเป็น (bpm, temp)
     final rawStream = _notifyChar!.onValueReceived;
     dataStream = rawStream.map<(int, double)>((bytes) {
       try {
-        final line = utf8.decode(bytes).trim(); // เช่น "78,36.7"
+        final line = utf8.decode(bytes).trim();
         final parts = line.split(',');
         final bpm = int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? 0;
         final temp = double.tryParse(parts.length > 1 ? parts[1] : '') ?? 0.0;
@@ -154,8 +158,7 @@ class HeartBleService {
     _notifySub = rawStream.listen((_) {}, onError: (_) {});
   }
 
-  // ------------------- Send Command (NEW) -------------------
-  /// ✅ ส่งคำสั่งควบคุมอุปกรณ์ เช่น "ON" / "OFF"
+  // ------------------- Send Command -------------------
   Future<void> sendCommand(String command) async {
     if (_device == null || _writeChar == null) {
       throw StateError('Device not connected or write characteristic missing');
@@ -163,7 +166,7 @@ class HeartBleService {
 
     final data = utf8.encode(command);
     await _writeChar!.write(data, withoutResponse: false);
-    print('📤 Sent command: $command');
+    debugPrint('📤 Sent command: $command');
   }
 
   // ------------------- Disconnect -------------------

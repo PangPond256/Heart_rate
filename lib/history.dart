@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:hive/hive.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'models/history_model.dart';
-import 'drawer.dart'; // ✅ ใช้ Drawer เดียวกับ Dashboard
+import 'drawer.dart';
 
 class HistoryScreen extends StatelessWidget {
   const HistoryScreen({super.key});
@@ -70,7 +69,7 @@ class HistoryScreen extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      drawer: const MainDrawer(), // ✅ ใช้ Drawer เดียวกับทุกหน้า
+      drawer: const MainDrawer(),
       appBar: AppBar(
         title: const Text("History"),
         actions: [
@@ -96,9 +95,9 @@ class HistoryScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // ✅ กราฟจริง (BPM + Temp)
+            // ✅ กราฟแนวโน้ม BPM / Temp
             Container(
-              height: 200,
+              height: 240,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: isDark ? const Color(0xFF1E293B) : Colors.white,
@@ -136,6 +135,38 @@ class HistoryScreen extends StatelessWidget {
 
                   return LineChart(
                     LineChartData(
+                      lineTouchData: LineTouchData(
+                        enabled: true,
+                        touchTooltipData: LineTouchTooltipData(
+                          tooltipPadding: const EdgeInsets.all(8),
+                          tooltipRoundedRadius: 8,
+                          tooltipMargin: 8,
+                          tooltipBorder: const BorderSide(
+                            color: Colors.black54,
+                            width: 1,
+                          ),
+                          fitInsideVertically: true,
+                          fitInsideHorizontally: true,
+                          getTooltipItems: (touchedSpots) {
+                            return touchedSpots.map((barSpot) {
+                              final value = barSpot.y;
+                              final color =
+                                  barSpot.bar.color ?? Colors.redAccent;
+                              final label = color == Colors.redAccent
+                                  ? "BPM"
+                                  : "Temp";
+                              return LineTooltipItem(
+                                '$label: ${value.toStringAsFixed(1)}',
+                                const TextStyle(
+                                  color: Colors.white,
+                                  backgroundColor:
+                                      Colors.black87, // ✅ พื้นหลัง tooltip
+                                ),
+                              );
+                            }).toList();
+                          },
+                        ),
+                      ),
                       gridData: FlGridData(
                         show: true,
                         drawVerticalLine: false,
@@ -209,6 +240,7 @@ class HistoryScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
 
+            // ✅ รายการประวัติ
             Expanded(
               child: ValueListenableBuilder(
                 valueListenable: box.listenable(),
@@ -226,6 +258,7 @@ class HistoryScreen extends StatelessWidget {
                   }
 
                   return ListView.separated(
+                    padding: const EdgeInsets.only(bottom: 80),
                     itemCount: items.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 12),
                     itemBuilder: (_, i) {

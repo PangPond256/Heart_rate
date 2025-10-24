@@ -22,8 +22,14 @@
 
     <!-- ✅ สำหรับการทำงาน BLE แบบ background หรือ foreground service -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- ✅ ประกาศว่าอุปกรณ์รองรับ BLE (ไม่บังคับติดตั้งในเครื่องที่ไม่มี BLE) -->
+    <!-- ✅ อนุญาตให้ทำงานเบื้องหลังต่อเมื่อปิดจอ -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- ✅ ประกาศว่าอุปกรณ์รองรับ BLE -->
     <uses-feature
         android:name="android.hardware.bluetooth_le"
         android:required="false" />
@@ -32,8 +38,17 @@
     <application
         android:label="smart_heart"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true"
+        tools:ignore="MissingApplicationIcon">
 
+        <!-- ✅ Service สำหรับ Background -->
+        <service
+            android:name="id.flutter.background_service.BackgroundService"
+            android:enabled="true"
+            android:exported="false" />
+
+        <!-- ✅ Activity หลักของแอป -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -54,6 +69,7 @@
             </intent-filter>
         </activity>
 
+        <!-- ✅ สำหรับ Flutter -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
