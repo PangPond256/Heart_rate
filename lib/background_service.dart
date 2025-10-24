@@ -1,16 +1,18 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
-import 'package:flutter_background_service_android/flutter_background_service_android.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:audioplayers/audioplayers.dart';
 
 
 /// 🔔 ตัวแปรหลัก
+/// 🔔 ตัวแปรหลัก
 final FlutterLocalNotificationsPlugin _notifications =
     FlutterLocalNotificationsPlugin();
 final AudioPlayer _player = AudioPlayer();
-final FlutterBluePlus _ble = FlutterBluePlus();
+
+
 
 /// ✅ เริ่มต้น Background Service
 Future<void> initializeService() async {
@@ -57,7 +59,7 @@ bool onIosBackground(ServiceInstance service) {
 /// ✅ ฟังก์ชันเริ่มเมื่อ Service ทำงาน
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) async {
-  // ✅ Notification Channel สำหรับ Android
+  // ✅ ตั้งค่า Notification Channel
   const AndroidNotificationChannel channel = AndroidNotificationChannel(
     'heart_alerts',
     'Heart Alerts',
@@ -76,17 +78,18 @@ void onStart(ServiceInstance service) async {
 
   FlutterBluePlus.scanResults.listen((results) async {
     for (final r in results) {
-      // ตรวจชื่ออุปกรณ์ BLE
+      // ✅ ชื่ออุปกรณ์ BLE ที่ต้องการเชื่อมต่อ
       if (r.device.name.contains('ESP32')) {
         await FlutterBluePlus.stopScan();
         await r.device.connect(autoConnect: false);
 
-        // ค้นหา Services และ Characteristics
+        // ค้นหา Service และ Characteristic
         final services = await r.device.discoverServices();
         BluetoothCharacteristic? notifyChar;
 
         for (final s in services) {
           for (final c in s.characteristics) {
+            // ✅ UUID ของ Characteristic ที่ส่งค่ามาจาก ESP32
             if (c.uuid.toString().toUpperCase() ==
                 '6E400003-B5A3-F393-E0A9-E50E24DCCA9E') {
               notifyChar = c;
@@ -98,7 +101,7 @@ void onStart(ServiceInstance service) async {
 
         // ❌ ไม่พบ Characteristic
         if (notifyChar == null) {
-          print('Characteristic not found!');
+          debugPrint('Characteristic not found!');
           return;
         }
 
@@ -144,8 +147,8 @@ void onStart(ServiceInstance service) async {
               );
             }
           } catch (e, st) {
-            print('Parse error: $e');
-            print(st);
+            debugPrint('Parse error: $e');
+            debugPrint(st.toString());
           }
         });
 
@@ -154,7 +157,7 @@ void onStart(ServiceInstance service) async {
     }
   });
 
-  // ✅ ป้องกันระบบปิด service เอง
+  // ✅ ป้องกันไม่ให้ระบบปิด service เอง
   Timer.periodic(const Duration(minutes: 15), (timer) {
     service.invoke('keepAlive', {});
   });
