@@ -2,8 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import 'models/history_model.dart';
-import 'ble/heart_ble_service.dart'; // ✅ ใช้ BLE จริง
-import 'utils/permissions.dart'; // ✅ ขอสิทธิ์ Bluetooth ก่อนสแกน
+import 'ble/heart_ble_service.dart';
+import 'utils/permissions.dart';
 
 class MeasurementScreen extends StatefulWidget {
   const MeasurementScreen({super.key});
@@ -19,6 +19,7 @@ class _MeasurementScreenState extends State<MeasurementScreen>
   StreamSubscription<(int, double)>? _sub;
 
   bool _isMeasuring = false;
+  bool _isDeviceOn = false; // ✅ เพิ่มสถานะอุปกรณ์
   int _heartRate = 0;
   double _progress = 0.0;
   double _temp = 36.7;
@@ -35,12 +36,12 @@ class _MeasurementScreenState extends State<MeasurementScreen>
   @override
   void dispose() {
     _sub?.cancel();
-    _ble.disconnect(); // ✅ ตัดการเชื่อมต่อเมื่อออกจากหน้า
+    _ble.disconnect();
     _controller.dispose();
     super.dispose();
   }
 
-  // ✅ เริ่มวัดจริงด้วย BLE (เชื่อมต่อ ESP32)
+  // ✅ เริ่มวัดจริงด้วย BLE
   Future<void> _startMeasurement() async {
     if (_isMeasuring) return;
 
@@ -50,20 +51,18 @@ class _MeasurementScreenState extends State<MeasurementScreen>
     });
 
     try {
-      await ensureBlePermissions(); // ✅ ขอสิทธิ์ Bluetooth
+      await ensureBlePermissions();
       await _ble.startScanAndConnect();
 
       _sub = _ble.dataStream?.listen(
         (data) async {
           final (bpm, temp) = data;
-
           setState(() {
             _heartRate = bpm;
             _temp = temp;
             _progress = (_progress + 0.05).clamp(0.0, 1.0);
           });
 
-          // ✅ บันทึกค่าจริงลง Hive
           final box = Hive.box<HistoryModel>('history');
           await box.add(
             HistoryModel(date: DateTime.now(), bpm: bpm, temperature: temp),
@@ -91,7 +90,6 @@ class _MeasurementScreenState extends State<MeasurementScreen>
     }
   }
 
-  // ✅ หยุดการวัด
   Future<void> _stopMeasurement() async {
     await _sub?.cancel();
     await _ble.disconnect();
@@ -102,7 +100,6 @@ class _MeasurementScreenState extends State<MeasurementScreen>
     ).showSnackBar(const SnackBar(content: Text('Measurement stopped')));
   }
 
-  // ✅ บันทึกค่าครั้งสุดท้ายและ reset state
   Future<void> _finalizeMeasurement() async {
     await _sub?.cancel();
     await _ble.disconnect();
@@ -116,6 +113,26 @@ class _MeasurementScreenState extends State<MeasurementScreen>
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Saved to history')));
+    }
+  }
+
+  // ✅ ส่งคำสั่งเปิด/ปิดอุปกรณ์
+  Future<void> _toggleDevicePower() async {
+    try {
+      await ensureBlePermissions();
+      await _ble.startScanAndConnect();
+
+      final command = _isDeviceOn ? "OFF" : "ON";
+      await _ble.sendCommand(command);
+      setState(() => _isDeviceOn = !_isDeviceOn);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_isDeviceOn ? '🟢 Device ON' : '🔴 Device OFF')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to send command: $e')));
     }
   }
 
@@ -133,7 +150,6 @@ class _MeasurementScreenState extends State<MeasurementScreen>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    // ❤️ Animated Heart
                     AnimatedBuilder(
                       animation: _controller,
                       builder: (_, __) => Transform.scale(
@@ -146,7 +162,6 @@ class _MeasurementScreenState extends State<MeasurementScreen>
                       ),
                     ),
 
-                    // แสดงค่าที่อ่านได้
                     Column(
                       children: [
                         const SizedBox(height: 8),
@@ -163,7 +178,6 @@ class _MeasurementScreenState extends State<MeasurementScreen>
                       ],
                     ),
 
-                    // Progress Circle
                     Stack(
                       alignment: Alignment.center,
                       children: [
@@ -189,11 +203,11 @@ class _MeasurementScreenState extends State<MeasurementScreen>
                       ],
                     ),
 
-                    // ปุ่มเริ่มวัด / หยุด
+                    // ✅ ปุ่มเริ่มวัด / หยุด
                     Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 40,
-                        vertical: 20,
+                        vertical: 10,
                       ),
                       child: ElevatedButton.icon(
                         onPressed: _isMeasuring
@@ -223,6 +237,39 @@ class _MeasurementScreenState extends State<MeasurementScreen>
                         ),
                       ),
                     ),
+
+                    // ✅ ปุ่มเปิด/ปิดอุปกรณ์
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 40,
+                        vertical: 10,
+                      ),
+                      child: ElevatedButton.icon(
+                        onPressed: _toggleDevicePower,
+                        icon: Icon(
+                          _isDeviceOn ? Icons.power_off : Icons.power,
+                          color: Colors.white,
+                        ),
+                        label: Text(
+                          _isDeviceOn ? "Turn Off Device" : "Turn On Device",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _isDeviceOn
+                              ? Colors.redAccent
+                              : const Color(0xFF1E3A8A),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          minimumSize: const Size(double.infinity, 60),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -233,7 +280,7 @@ class _MeasurementScreenState extends State<MeasurementScreen>
     );
   }
 
-  // ✅ Drawer Menu เหมือน Dashboard
+  // ✅ Drawer Menu
   Widget _buildDrawer(BuildContext context) {
     return Drawer(
       shape: const RoundedRectangleBorder(

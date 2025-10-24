@@ -1,35 +1,16 @@
 workflows:
-  flutter-build:
-    name: Build Flutter App (Android + iOS)
+  android-release:
+    name: Android Release Build
     max_build_duration: 60
-    instance_type: mac_mini_m2
     environment:
       flutter: stable
-      xcode: latest
-      cocoapods: default
     scripts:
-      - name: Get Flutter packages
+      - name: Install dependencies
         script: |
           flutter clean
           flutter pub get
-
-      - name: Build Android APK
+      - name: Build APK
         script: |
           flutter build apk --release
-
-      - name: Build iOS IPA
-        script: |
-          flutter build ipa --release
-
     artifacts:
-      - build/app/outputs/flutter-apk/*.apk
-      - build/ios/ipa/*.ipa
-
-    publishing:
-      email:
-        recipients:
-          - your-email@example.com
-      app_store_connect:
-        api_key: $APP_STORE_KEY
-        issuer_id: $APP_STORE_ISSUER_ID
-        key_id: $APP_STORE_KEY_ID
+      - build/app/outputs/flutter-apk/app-release.apk

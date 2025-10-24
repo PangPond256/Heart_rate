@@ -1,14 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- 🔵 Bluetooth permissions -->
-    <!-- สำหรับ Android 12+ (API 31+) -->
+    <!-- ✅ Bluetooth permissions -->
+    <!-- สำหรับ Android 12+ (API 31 ขึ้นไป) -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <!-- ถ้าจะโฆษณา (ไม่จำเป็นสำหรับรับค่า) -->
+    <!-- ถ้าต้องการโฆษณา BLE (ไม่จำเป็นสำหรับอ่านค่า) -->
     <!-- <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" /> -->
 
-    <!-- สำหรับ Android ≤ 11 (API 30 ลงมา) -->
+    <!-- สำหรับ Android 11 ลงมา -->
     <uses-permission android:name="android.permission.BLUETOOTH"
         android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
@@ -20,16 +20,20 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"
         android:maxSdkVersion="30" />
 
-    <!-- ประกาศว่าแอปรองรับ BLE (ไม่บังคับติดตั้งในเครื่องที่ไม่มี BLE) -->
+    <!-- ✅ สำหรับการทำงาน BLE แบบ background หรือ foreground service -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <!-- ✅ ประกาศว่าอุปกรณ์รองรับ BLE (ไม่บังคับติดตั้งในเครื่องที่ไม่มี BLE) -->
     <uses-feature
         android:name="android.hardware.bluetooth_le"
         android:required="false" />
 
-    <!-- ====== ด้านล่างคือของเดิมของคุณ (ไม่ต้องแก้) ====== -->
+    <!-- ================== APP CONFIG ================== -->
     <application
         android:label="smart_heart"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -39,12 +43,14 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
+
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme" />
+
             <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
@@ -53,10 +59,12 @@
             android:value="2" />
     </application>
 
+    <!-- ✅ อนุญาตให้ค้นหา Intent ที่ใช้ Bluetooth หรือแชร์ข้อความ -->
     <queries>
         <intent>
-            <action android:name="android.intent.action.PROCESS_TEXT"/>
-            <data android:mimeType="text/plain"/>
+            <action android:name="android.intent.action.PROCESS_TEXT" />
+            <data android:mimeType="text/plain" />
         </intent>
     </queries>
+
 </manifest>

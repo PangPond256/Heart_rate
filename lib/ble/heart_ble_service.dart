@@ -8,11 +8,14 @@ class HeartBleService {
       '6E400001-B5A3-F393-E0A9-E50E24DCCA9E';
   static const String defaultNotifyCharUuid =
       '6E400003-B5A3-F393-E0A9-E50E24DCCA9E';
+  static const String defaultWriteCharUuid =
+      '6E400002-B5A3-F393-E0A9-E50E24DCCA9E'; // ✅ เพิ่ม write characteristic UUID
 
   HeartBleService({
     this.targetDeviceName = defaultDeviceName,
     this.serviceUuid = defaultServiceUuid,
     this.notifyCharUuid = defaultNotifyCharUuid,
+    this.writeCharUuid = defaultWriteCharUuid,
     this.scanTimeout = const Duration(seconds: 8),
     this.connectTimeout = const Duration(seconds: 10),
   });
@@ -20,12 +23,14 @@ class HeartBleService {
   final String targetDeviceName;
   final String serviceUuid;
   final String notifyCharUuid;
+  final String writeCharUuid;
 
   final Duration scanTimeout;
   final Duration connectTimeout;
 
   BluetoothDevice? _device;
   BluetoothCharacteristic? _notifyChar;
+  BluetoothCharacteristic? _writeChar; // ✅ เก็บ characteristic สำหรับส่งคำสั่ง
   Stream<(int bpm, double temp)>? dataStream;
 
   StreamSubscription<List<ScanResult>>? _scanSub;
@@ -101,6 +106,7 @@ class HeartBleService {
     return completer.future.whenComplete(_cancelScanSub);
   }
 
+  // ------------------- Discover Characteristics -------------------
   Future<void> _discoverAndSubscribe() async {
     if (_device == null) {
       throw StateError('No device found to discover services');
@@ -109,28 +115,30 @@ class HeartBleService {
     final services = await _device!.discoverServices();
 
     BluetoothCharacteristic? notifyChar;
+    BluetoothCharacteristic? writeChar;
+
     for (final s in services) {
       if (_uuidEq(s.uuid, serviceUuid)) {
         for (final c in s.characteristics) {
           if (_uuidEq(c.uuid, notifyCharUuid) && c.properties.notify) {
             notifyChar = c;
-            break;
+          } else if (_uuidEq(c.uuid, writeCharUuid) && c.properties.write) {
+            writeChar = c;
           }
         }
       }
-      if (notifyChar != null) break;
     }
 
     if (notifyChar == null) {
       throw StateError('Notify characteristic not found on device');
     }
-
     _notifyChar = notifyChar;
+    _writeChar = writeChar;
+
     await _notifyChar!.setNotifyValue(true);
 
-    // ✅ ใช้ onValueReceived เพื่อรับค่าจริงแบบต่อเนื่อง
+    // ✅ แปลงข้อมูลเป็น (bpm, temp)
     final rawStream = _notifyChar!.onValueReceived;
-
     dataStream = rawStream.map<(int, double)>((bytes) {
       try {
         final line = utf8.decode(bytes).trim(); // เช่น "78,36.7"
@@ -146,6 +154,19 @@ class HeartBleService {
     _notifySub = rawStream.listen((_) {}, onError: (_) {});
   }
 
+  // ------------------- Send Command (NEW) -------------------
+  /// ✅ ส่งคำสั่งควบคุมอุปกรณ์ เช่น "ON" / "OFF"
+  Future<void> sendCommand(String command) async {
+    if (_device == null || _writeChar == null) {
+      throw StateError('Device not connected or write characteristic missing');
+    }
+
+    final data = utf8.encode(command);
+    await _writeChar!.write(data, withoutResponse: false);
+    print('📤 Sent command: $command');
+  }
+
+  // ------------------- Disconnect -------------------
   Future<void> disconnect() async {
     try {
       await _notifyChar?.setNotifyValue(false);
@@ -161,6 +182,7 @@ class HeartBleService {
 
     _device = null;
     _notifyChar = null;
+    _writeChar = null;
     dataStream = null;
     _connected = false;
   }
