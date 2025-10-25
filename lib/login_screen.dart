@@ -23,7 +23,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _userBox = Hive.box<UserModel>('users');
-    _sessionBox = Hive.box('session'); // ✅ กล่อง session (เปิดใน main.dart)
+    _sessionBox = Hive.box('session');
   }
 
   @override
@@ -36,13 +36,15 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _doLogin() async {
     FocusScope.of(context).unfocus(); // ปิดคีย์บอร์ด
     final messenger = ScaffoldMessenger.of(context);
+
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
     try {
       final uname = _username.text.trim();
-      final pwd = _password.text;
+      final pwd = _password.text.trim();
 
+      // 🔍 หา user จาก Hive
       final user = _userBox.values.firstWhere(
         (u) => u.username == uname && u.password == pwd,
         orElse: () => UserModel(
@@ -56,6 +58,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
 
+      // ❌ ไม่พบผู้ใช้
       if (user.username.isEmpty) {
         messenger.showSnackBar(
           const SnackBar(content: Text('Invalid username or password')),
@@ -63,15 +66,18 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      // ✅ บันทึก session ผู้ใช้ปัจจุบัน
-      _sessionBox.put('currentUsername', user.username);
+      // ✅ เก็บ session สำหรับผู้ใช้ปัจจุบัน
+      await _sessionBox.put('currentUsername', user.username);
 
       messenger.showSnackBar(
         const SnackBar(content: Text('Signed in successfully')),
       );
 
+      // ✅ ไปหน้า Dashboard
       if (!mounted) return;
       Navigator.pushReplacementNamed(context, '/dashboard', arguments: user);
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -89,7 +95,7 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               children: [
                 const Text(
-                  'HeartSense',
+                  'SmartHealth',
                   style: TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
@@ -110,6 +116,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   decoration: const InputDecoration(
                     labelText: 'Username',
                     border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.person_outline),
                   ),
                   validator: (v) =>
                       (v == null || v.trim().isEmpty) ? 'Required' : null,
@@ -121,10 +128,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   controller: _password,
                   obscureText: _obscure,
                   textInputAction: TextInputAction.done,
-                  onFieldSubmitted: (_) => _isLoading ? null : _doLogin(),
+                  onFieldSubmitted: (_) =>
+                      _isLoading ? null : _doLogin(), // enter เพื่อ login
                   decoration: InputDecoration(
                     labelText: 'Password',
                     border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
                       onPressed: () => setState(() => _obscure = !_obscure),
                       icon: Icon(
@@ -137,7 +146,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 22),
 
-                // Sign In Button (แสดงสถานะโหลด)
+                // ปุ่ม Login
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -168,7 +177,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                   ),
                 ),
+                const SizedBox(height: 10),
 
+                // ปุ่มสมัครสมาชิก
                 TextButton(
                   onPressed: _isLoading
                       ? null
@@ -176,7 +187,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             Navigator.pushReplacementNamed(context, '/signup'),
                   child: const Text(
                     "Don't have an account? Sign up",
-                    style: TextStyle(color: Color(0xFF1E3A8A)),
+                    style: TextStyle(
+                      color: Color(0xFF1E3A8A),
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],

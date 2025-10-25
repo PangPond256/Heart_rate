@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
+import 'models/user_model.dart';
 import 'models/history_model.dart';
 import 'profile.dart';
 import 'measurement.dart';
 import 'login_screen.dart';
-import 'drawer.dart'; // ✅ เพิ่ม Drawer ให้ทุกหน้ามีเมนูหลักเหมือน Dashboard
+import 'drawer.dart';
 
 class SettingsScreen extends StatefulWidget {
   final Function(bool)? onThemeChanged;
@@ -75,7 +76,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final messenger = ScaffoldMessenger.of(context);
       final box = Hive.box<HistoryModel>('history');
       await box.clear();
-
       messenger.showSnackBar(
         const SnackBar(content: Text('All history cleared')),
       );
@@ -120,7 +120,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      drawer: const MainDrawer(), // ✅ เพิ่ม Drawer Menu
+      drawer: const MainDrawer(),
       appBar: AppBar(
         title: const Text('Settings'),
         backgroundColor: Theme.of(context).colorScheme.surface,
@@ -130,7 +130,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // ---------- Account ----------
           const Text(
             'Account',
             style: TextStyle(
@@ -165,10 +164,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             iconColor: Colors.redAccent,
             onTap: () => _logout(context),
           ),
-
           const Divider(height: 32),
 
-          // ---------- App ----------
           const Text(
             'App',
             style: TextStyle(
@@ -190,10 +187,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               color: Color(0xFF1E3A8A),
             ),
           ),
-
           const Divider(height: 32),
 
-          // ---------- Device ----------
           const Text(
             'Device',
             style: TextStyle(
@@ -241,12 +236,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       subtitle: subtitle != null ? Text(subtitle) : null,
       trailing: const Icon(Icons.chevron_right, color: Colors.grey),
       onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
     );
   }
 }
 
-// ------- Change Password -------
+// ----------------------------------------------------------
+// ✅ Change Password Screen (แก้สมบูรณ์แบบ)
+// ----------------------------------------------------------
+
 class ChangePasswordScreen extends StatefulWidget {
   const ChangePasswordScreen({super.key});
 
@@ -265,25 +262,51 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     final messenger = ScaffoldMessenger.of(context);
     final session = Hive.box('session');
     final uname = session.get('currentUsername');
-    final users = Hive.box('users');
-    final user = users.values.firstWhere((u) => u.username == uname);
+    final users = Hive.box<UserModel>('users');
+
+    final user = users.values.firstWhere(
+      (u) => u.username == uname,
+      orElse: () => UserModel(
+        username: '',
+        password: '',
+        name: '',
+        age: 0,
+        gender: '',
+        weight: 0,
+        height: 0,
+      ),
+    );
+
+    if (user.username.isEmpty) {
+      messenger.showSnackBar(const SnackBar(content: Text('User not found')));
+      return;
+    }
+
     if (user.password != _oldPwd.text.trim()) {
       messenger.showSnackBar(
         const SnackBar(content: Text('Old password is incorrect')),
       );
       return;
     }
+
     if (_newPwd.text != _confirmPwd.text) {
       messenger.showSnackBar(
         const SnackBar(content: Text('Passwords do not match')),
       );
       return;
     }
+
+    // ✅ อัปเดตรหัสผ่านใหม่
     user.password = _newPwd.text.trim();
     await user.save();
+
     messenger.showSnackBar(
       const SnackBar(content: Text('Password changed successfully')),
     );
+
+    // ✅ รอ SnackBar แล้วกลับไปหน้า Settings เดิม
+    await Future.delayed(const Duration(milliseconds: 800));
+    if (!mounted) return;
     Navigator.pop(context);
   }
 
