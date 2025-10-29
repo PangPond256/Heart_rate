@@ -3,9 +3,9 @@ import 'package:hive/hive.dart';
 import 'models/user_model.dart';
 import 'models/history_model.dart';
 import 'profile.dart';
-import 'measurement.dart';
 import 'login_screen.dart';
 import 'drawer.dart';
+import 'summary_screen.dart'; // ✅ เพิ่มหน้า Summary แทน Measurement
 
 class SettingsScreen extends StatefulWidget {
   final Function(bool)? onThemeChanged;
@@ -190,7 +190,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Divider(height: 32),
 
           const Text(
-            'Device',
+            'Data',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -199,13 +199,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 8),
           _tile(
-            icon: Icons.bluetooth_connected,
-            title: 'Reconnect Device',
-            subtitle: 'Re-scan or re-pair ESP32',
+            icon: Icons.monitor_heart_rounded,
+            title: 'Health Summary',
+            subtitle: 'View daily and weekly health analysis',
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const MeasurementScreen()),
+                MaterialPageRoute(builder: (_) => const SummaryScreen()),
               );
             },
           ),
@@ -241,7 +241,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 
 // ----------------------------------------------------------
-// ✅ Change Password Screen (แก้สมบูรณ์แบบ)
+// ✅ Change Password Screen (คงไว้เหมือนเดิม)
 // ----------------------------------------------------------
 
 class ChangePasswordScreen extends StatefulWidget {
@@ -296,7 +296,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       return;
     }
 
-    // ✅ อัปเดตรหัสผ่านใหม่
+    // ✅ Update new password
     user.password = _newPwd.text.trim();
     await user.save();
 
@@ -304,7 +304,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       const SnackBar(content: Text('Password changed successfully')),
     );
 
-    // ✅ รอ SnackBar แล้วกลับไปหน้า Settings เดิม
     await Future.delayed(const Duration(milliseconds: 800));
     if (!mounted) return;
     Navigator.pop(context);

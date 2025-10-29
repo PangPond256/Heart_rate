@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:smart_heart/ble/ble_manager.dart'; // ✅ Only this import
+import 'package:hive/hive.dart';
+import 'package:smart_heart/ble/ble_manager.dart';
+import 'models/history_model.dart'; // ✅ ต้องมี model นี้ในโฟลเดอร์ models
 
 class DeviceControlPage extends StatefulWidget {
   const DeviceControlPage({Key? key}) : super(key: key);
@@ -9,12 +12,15 @@ class DeviceControlPage extends StatefulWidget {
 }
 
 class _DeviceControlPageState extends State<DeviceControlPage> {
-  final ble = BleManager().ble; // ✅ Shared BLE instance
+  final ble = BleManager().ble;
   Stream<(int bpm, double temp)>? _dataStream;
+
   int _bpm = 0;
   double _temp = 0.0;
   bool _connecting = false;
   bool _connected = false;
+
+  Timer? _saveTimer;
 
   @override
   void initState() {
@@ -38,12 +44,44 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
           _temp = data.$2;
         });
       });
+
+      // ✅ Start auto-save timer
+      _startAutoSave();
     } catch (e) {
       setState(() => _connecting = false);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('❌ Connection failed: $e')));
     }
+  }
+
+  void _startAutoSave() {
+    _saveTimer?.cancel();
+    _saveTimer = Timer.periodic(const Duration(minutes: 30), (_) async {
+      await _saveData();
+    });
+  }
+
+  Future<void> _saveData() async {
+    if (!_connected || _bpm == 0 || _temp == 0.0) return;
+
+    final box = Hive.box<HistoryModel>('history');
+    final record = HistoryModel(
+      date: DateTime.now(),
+      bpm: _bpm,
+      temperature: _temp,
+    );
+
+    await box.add(record);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          "💾 Data saved — BPM: $_bpm, Temp: ${_temp.toStringAsFixed(1)} °C",
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   Future<void> _sendCommand(String cmd) async {
@@ -84,6 +122,12 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                     onPressed: () => _sendCommand("STOP"),
                     child: const Text('Stop Measurement'),
                   ),
+                  const SizedBox(height: 20),
+                  ElevatedButton.icon(
+                    onPressed: _saveData,
+                    icon: const Icon(Icons.save),
+                    label: const Text('Save Now'),
+                  ),
                 ],
               )
             : ElevatedButton(
@@ -96,7 +140,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
 
   @override
   void dispose() {
-    // ⚠️ Do NOT disconnect BLE here (shared connection)
+    _saveTimer?.cancel();
     super.dispose();
   }
 }

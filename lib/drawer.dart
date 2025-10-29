@@ -38,7 +38,7 @@ class MainDrawer extends StatelessWidget {
               ),
               const SizedBox(height: 24),
 
-              // Dashboard
+              // 🧭 Dashboard
               _drawerItem(
                 context,
                 icon: LucideIcons.layoutDashboard,
@@ -48,7 +48,7 @@ class MainDrawer extends StatelessWidget {
                 textColor: textColor,
               ),
 
-              // ✅ History (แก้แล้วให้ทำงานได้แน่นอน)
+              // 📊 History
               _drawerItem(
                 context,
                 icon: LucideIcons.activity,
@@ -58,17 +58,17 @@ class MainDrawer extends StatelessWidget {
                 textColor: textColor,
               ),
 
-              // Measurement
+              // 🩺 Health Summary (แทน Measurement)
               _drawerItem(
                 context,
-                icon: LucideIcons.heart,
-                title: "Measurement",
-                route: '/measurement',
+                icon: LucideIcons.heartPulse,
+                title: "Health Summary",
+                route: '/summary',
                 iconColor: iconColor,
                 textColor: textColor,
               ),
 
-              // Profile
+              // 👤 Profile
               _drawerItem(
                 context,
                 icon: LucideIcons.user,
@@ -78,7 +78,7 @@ class MainDrawer extends StatelessWidget {
                 textColor: textColor,
               ),
 
-              // Settings
+              // ⚙️ Settings
               _drawerItem(
                 context,
                 icon: LucideIcons.settings,

@@ -3,18 +3,18 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'models/user_model.dart';
 import 'models/history_model.dart';
 import 'dashboard.dart';
-import 'measurement.dart';
 import 'history.dart';
 import 'profile.dart';
 import 'settings.dart';
 import 'login_screen.dart';
 import 'signup_screen.dart';
-import 'ble/ble_manager.dart'; // ✅ Import shared BLE manager
+import 'summary_screen.dart'; // ✅ หน้าสรุปสุขภาพใหม่
+import 'ble/ble_manager.dart'; // ✅ BLE Manager
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ✅ Initialize Hive local storage
+  // ✅ Initialize Hive
   await Hive.initFlutter();
   Hive.registerAdapter(UserModelAdapter());
   Hive.registerAdapter(HistoryModelAdapter());
@@ -23,7 +23,7 @@ void main() async {
   await Hive.openBox('settings');
   await Hive.openBox('session');
 
-  // ✅ Initialize BLE Manager once (keeps BLE alive globally)
+  // ✅ Initialize BLE
   BleManager().init();
 
   runApp(const HeartSenseApp());
@@ -45,7 +45,6 @@ class _HeartSenseAppState extends State<HeartSenseApp> {
     _loadTheme();
   }
 
-  // ✅ Load theme preference from Hive
   Future<void> _loadTheme() async {
     final box = await Hive.openBox('settings');
     setState(() {
@@ -53,7 +52,6 @@ class _HeartSenseAppState extends State<HeartSenseApp> {
     });
   }
 
-  // ✅ Toggle dark/light theme and save it
   void _toggleTheme(bool value) async {
     final box = await Hive.openBox('settings');
     await box.put('darkMode', value);
@@ -104,10 +102,10 @@ class _HeartSenseAppState extends State<HeartSenseApp> {
         '/login': (context) => const LoginScreen(),
         '/signup': (context) => const SignupScreen(),
         '/dashboard': (context) => const HeartSenseDashboard(),
-        '/measurement': (context) => const MeasurementScreen(),
         '/history': (context) => const HistoryScreen(),
         '/profile': (context) => const ProfileScreen(),
         '/settings': (context) => SettingsScreen(onThemeChanged: _toggleTheme),
+        '/summary': (context) => const SummaryScreen(), // ✅ ใช้หน้า summary แทน
       },
     );
   }
