@@ -9,9 +9,12 @@ import 'profile.dart';
 import 'settings.dart';
 import 'login_screen.dart';
 import 'signup_screen.dart';
+import 'ble/ble_manager.dart'; // ✅ Import shared BLE manager
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ✅ Initialize Hive local storage
   await Hive.initFlutter();
   Hive.registerAdapter(UserModelAdapter());
   Hive.registerAdapter(HistoryModelAdapter());
@@ -19,6 +22,10 @@ void main() async {
   await Hive.openBox<HistoryModel>('history');
   await Hive.openBox('settings');
   await Hive.openBox('session');
+
+  // ✅ Initialize BLE Manager once (keeps BLE alive globally)
+  BleManager().init();
+
   runApp(const HeartSenseApp());
 }
 
@@ -38,6 +45,7 @@ class _HeartSenseAppState extends State<HeartSenseApp> {
     _loadTheme();
   }
 
+  // ✅ Load theme preference from Hive
   Future<void> _loadTheme() async {
     final box = await Hive.openBox('settings');
     setState(() {
@@ -45,6 +53,7 @@ class _HeartSenseAppState extends State<HeartSenseApp> {
     });
   }
 
+  // ✅ Toggle dark/light theme and save it
   void _toggleTheme(bool value) async {
     final box = await Hive.openBox('settings');
     await box.put('darkMode', value);

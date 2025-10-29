@@ -1,83 +1,102 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:smart_heart/ble/ble_manager.dart'; // ✅ Only this import
 
 class DeviceControlPage extends StatefulWidget {
-  final BluetoothDevice device;
-  const DeviceControlPage({super.key, required this.device});
+  const DeviceControlPage({Key? key}) : super(key: key);
 
   @override
   State<DeviceControlPage> createState() => _DeviceControlPageState();
 }
 
 class _DeviceControlPageState extends State<DeviceControlPage> {
-  BluetoothCharacteristic? controlChar;
-  bool deviceOn = false;
+  final ble = BleManager().ble; // ✅ Shared BLE instance
+  Stream<(int bpm, double temp)>? _dataStream;
+  int _bpm = 0;
+  double _temp = 0.0;
+  bool _connecting = false;
+  bool _connected = false;
 
   @override
   void initState() {
     super.initState();
-    _initDevice();
+    _initBleConnection();
   }
 
-  Future<void> _initDevice() async {
-    // ค้นหา service และ characteristic ที่ใช้สั่งงานอุปกรณ์
-    var services = await widget.device.discoverServices();
-    for (var s in services) {
-      for (var c in s.characteristics) {
-        if (c.uuid.toString().contains("abcd1234")) {
-          controlChar = c;
-        }
-      }
+  Future<void> _initBleConnection() async {
+    setState(() => _connecting = true);
+    try {
+      await ble.startScanAndConnect();
+      setState(() {
+        _connected = true;
+        _connecting = false;
+      });
+
+      _dataStream = ble.dataStream;
+      _dataStream?.listen((data) {
+        setState(() {
+          _bpm = data.$1;
+          _temp = data.$2;
+        });
+      });
+    } catch (e) {
+      setState(() => _connecting = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('❌ Connection failed: $e')));
     }
-    setState(() {});
   }
 
   Future<void> _sendCommand(String cmd) async {
-    if (controlChar == null) return;
-    await controlChar!.write(cmd.codeUnits, withoutResponse: false);
-    setState(() {
-      deviceOn = cmd == "ON";
-    });
+    try {
+      await ble.sendCommand(cmd);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('📤 Command sent: $cmd')));
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('⚠️ Failed to send command: $e')));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("ควบคุมอุปกรณ์"),
-        backgroundColor: Colors.blueAccent,
-      ),
+      appBar: AppBar(title: const Text('Device Control')),
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              deviceOn ? Icons.power : Icons.power_off,
-              color: deviceOn ? Colors.green : Colors.grey,
-              size: 120,
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: () => _sendCommand("ON"),
-              icon: const Icon(Icons.flash_on),
-              label: const Text("เปิดอุปกรณ์"),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            ),
-            const SizedBox(height: 10),
-            ElevatedButton.icon(
-              onPressed: () => _sendCommand("OFF"),
-              icon: const Icon(Icons.flash_off),
-              label: const Text("ปิดอุปกรณ์"),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              deviceOn ? "สถานะ: เปิดอยู่" : "สถานะ: ปิดอยู่",
-              style: const TextStyle(fontSize: 18),
-            ),
-          ],
-        ),
+        child: _connecting
+            ? const CircularProgressIndicator()
+            : _connected
+            ? Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('❤️ BPM: $_bpm', style: const TextStyle(fontSize: 26)),
+                  Text(
+                    '🌡️ Temp: ${_temp.toStringAsFixed(1)} °C',
+                    style: const TextStyle(fontSize: 26),
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: () => _sendCommand("START"),
+                    child: const Text('Start Measurement'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => _sendCommand("STOP"),
+                    child: const Text('Stop Measurement'),
+                  ),
+                ],
+              )
+            : ElevatedButton(
+                onPressed: _initBleConnection,
+                child: const Text('Connect Device'),
+              ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    // ⚠️ Do NOT disconnect BLE here (shared connection)
+    super.dispose();
   }
 }

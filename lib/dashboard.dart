@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:hive/hive.dart';
 import 'models/history_model.dart';
-import 'ble/heart_ble_service.dart';
+import 'ble/ble_manager.dart'; // ✅ Use shared BLE manager
 import 'utils/permissions.dart';
 import 'drawer.dart';
 
@@ -16,7 +16,7 @@ class HeartSenseDashboard extends StatefulWidget {
 
 class _HeartSenseDashboardState extends State<HeartSenseDashboard>
     with SingleTickerProviderStateMixin {
-  final _ble = HeartBleService();
+  final _ble = BleManager().ble; // ✅ Use shared BLE instance
   StreamSubscription<(int, double)>? _sub;
   late AnimationController _heartController;
 
@@ -37,12 +37,13 @@ class _HeartSenseDashboardState extends State<HeartSenseDashboard>
       duration: const Duration(milliseconds: 700),
     )..repeat(reverse: true);
     _loadStats();
+    _connectBle(); // ✅ Auto-connect when entering dashboard
   }
 
   @override
   void dispose() {
     _sub?.cancel();
-    _ble.disconnect();
+    // ❌ Do not disconnect BLE, keep it alive
     _heartController.dispose();
     super.dispose();
   }
@@ -63,17 +64,20 @@ class _HeartSenseDashboardState extends State<HeartSenseDashboard>
     }
   }
 
+  // ✅ Connect to BLE using shared service
   Future<void> _connectBle() async {
     if (_isScanning || _isConnected) return;
 
     setState(() => _isScanning = true);
     try {
-      await ensureBlePermissions(); // ✅ ขอสิทธิ์ก่อนเริ่มสแกน
+      await ensureBlePermissions();
       await _ble.startScanAndConnect();
+
       setState(() {
         _isConnected = true;
         _isScanning = false;
       });
+
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -88,21 +92,18 @@ class _HeartSenseDashboardState extends State<HeartSenseDashboard>
             _temp = temp;
           });
 
-          // ✅ บันทึกค่าลง Hive อัตโนมัติทุกเฟรม
           final box = Hive.box<HistoryModel>('history');
           await box.add(
             HistoryModel(date: DateTime.now(), bpm: bpm, temperature: temp),
           );
 
-          _loadStats(); // อัปเดตสรุปสถิติ
+          _loadStats();
         },
         onError: (err) async {
           debugPrint('BLE stream error: $err');
-          setState(() {
-            _isConnected = false;
-          });
+          setState(() => _isConnected = false);
           await Future.delayed(const Duration(seconds: 3));
-          if (mounted) _connectBle(); // ✅ auto-reconnect
+          if (mounted) _connectBle(); // ✅ Auto-reconnect
         },
       );
     } catch (e) {
@@ -199,7 +200,7 @@ class _HeartSenseDashboardState extends State<HeartSenseDashboard>
                     ),
                   ),
                   const SizedBox(height: 10),
-                  // 🌡️ Real-time Temperature
+                  // 🌡️ Temperature
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -249,7 +250,7 @@ class _HeartSenseDashboardState extends State<HeartSenseDashboard>
 
             const SizedBox(height: 24),
 
-            // 📊 Summary
+            // 📊 Summary Card
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),

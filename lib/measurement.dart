@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import 'models/history_model.dart';
-import 'ble/heart_ble_service.dart';
+import 'ble/ble_manager.dart';
 import 'utils/permissions.dart';
 
 class MeasurementScreen extends StatefulWidget {
@@ -15,11 +15,12 @@ class MeasurementScreen extends StatefulWidget {
 class _MeasurementScreenState extends State<MeasurementScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  final _ble = HeartBleService();
+  final _ble = BleManager()
+      .ble; // ✅ Use shared BLE instance instead of new HeartBleService()
   StreamSubscription<(int, double)>? _sub;
 
   bool _isMeasuring = false;
-  bool _isDeviceOn = false; // ✅ เพิ่มสถานะอุปกรณ์
+  bool _isDeviceOn = false;
   int _heartRate = 0;
   double _progress = 0.0;
   double _temp = 36.7;
@@ -36,12 +37,12 @@ class _MeasurementScreenState extends State<MeasurementScreen>
   @override
   void dispose() {
     _sub?.cancel();
-    _ble.disconnect();
+    // ❌ Do not disconnect BLE here — we want to keep connection alive across screens
     _controller.dispose();
     super.dispose();
   }
 
-  // ✅ เริ่มวัดจริงด้วย BLE
+  // ✅ Start measurement using BLE
   Future<void> _startMeasurement() async {
     if (_isMeasuring) return;
 
@@ -92,7 +93,7 @@ class _MeasurementScreenState extends State<MeasurementScreen>
 
   Future<void> _stopMeasurement() async {
     await _sub?.cancel();
-    await _ble.disconnect();
+    // ⚠️ Do NOT call _ble.disconnect() here to preserve connection
     setState(() => _isMeasuring = false);
 
     ScaffoldMessenger.of(
@@ -102,7 +103,7 @@ class _MeasurementScreenState extends State<MeasurementScreen>
 
   Future<void> _finalizeMeasurement() async {
     await _sub?.cancel();
-    await _ble.disconnect();
+    // ⚠️ Do NOT disconnect BLE here either
 
     setState(() {
       _isMeasuring = false;
@@ -116,7 +117,7 @@ class _MeasurementScreenState extends State<MeasurementScreen>
     }
   }
 
-  // ✅ ส่งคำสั่งเปิด/ปิดอุปกรณ์
+  // ✅ Turn device ON/OFF
   Future<void> _toggleDevicePower() async {
     try {
       await ensureBlePermissions();
@@ -161,7 +162,6 @@ class _MeasurementScreenState extends State<MeasurementScreen>
                         ),
                       ),
                     ),
-
                     Column(
                       children: [
                         const SizedBox(height: 8),
@@ -177,7 +177,6 @@ class _MeasurementScreenState extends State<MeasurementScreen>
                         ),
                       ],
                     ),
-
                     Stack(
                       alignment: Alignment.center,
                       children: [
@@ -202,8 +201,6 @@ class _MeasurementScreenState extends State<MeasurementScreen>
                         ),
                       ],
                     ),
-
-                    // ✅ ปุ่มเริ่มวัด / หยุด
                     Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 40,
@@ -237,8 +234,6 @@ class _MeasurementScreenState extends State<MeasurementScreen>
                         ),
                       ),
                     ),
-
-                    // ✅ ปุ่มเปิด/ปิดอุปกรณ์
                     Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 40,
