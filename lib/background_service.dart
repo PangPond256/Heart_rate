@@ -4,18 +4,18 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:hive_flutter/hive_flutter.dart'; // ✅ เพิ่มสำหรับอ่าน settings จาก Hive
 
-
-/// 🔔 ตัวแปรหลัก
 /// 🔔 ตัวแปรหลัก
 final FlutterLocalNotificationsPlugin _notifications =
     FlutterLocalNotificationsPlugin();
 final AudioPlayer _player = AudioPlayer();
 
-
-
 /// ✅ เริ่มต้น Background Service
 Future<void> initializeService() async {
+  // ตั้งค่า Hive (กรณียังไม่ initialize)
+  await Hive.initFlutter();
+
   // ตั้งค่า Notification สำหรับ Android & iOS
   const AndroidInitializationSettings androidInit =
       AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -116,6 +116,18 @@ void onStart(ServiceInstance service) async {
             final parts = line.split(',');
             final bpm = double.tryParse(parts.isNotEmpty ? parts[0] : '') ?? 0;
             final temp = double.tryParse(parts.length > 1 ? parts[1] : '') ?? 0;
+
+            // ✅ อ่านค่า settings ก่อนจะแจ้งเตือน
+            final box = await Hive.openBox('settings');
+            final notifyEnabled = box.get(
+              'notificationsEnabled',
+              defaultValue: true,
+            );
+
+            if (!notifyEnabled) {
+              debugPrint('🔕 Notifications disabled by user.');
+              return; // ❌ ถ้าปิดแจ้งเตือน ข้าม
+            }
 
             // ✅ ตรวจจับค่าผิดปกติ
             if (bpm < 50 || bpm > 120) {

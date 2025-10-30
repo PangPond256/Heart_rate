@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:hive/hive.dart';
 import 'models/history_model.dart';
-import 'ble/ble_manager.dart'; // ✅ Use shared BLE manager
+import 'ble/ble_manager.dart';
 import 'utils/permissions.dart';
 import 'drawer.dart';
 
@@ -16,7 +16,7 @@ class HeartSenseDashboard extends StatefulWidget {
 
 class _HeartSenseDashboardState extends State<HeartSenseDashboard>
     with SingleTickerProviderStateMixin {
-  final _ble = BleManager().ble; // ✅ Use shared BLE instance
+  final _ble = BleManager().ble;
   StreamSubscription<(int, double)>? _sub;
   late AnimationController _heartController;
 
@@ -28,6 +28,8 @@ class _HeartSenseDashboardState extends State<HeartSenseDashboard>
 
   bool _isConnected = false;
   bool _isScanning = false;
+  int _reconnectAttempts = 0;
+  Timer? _reconnectTimer;
 
   @override
   void initState() {
@@ -37,13 +39,13 @@ class _HeartSenseDashboardState extends State<HeartSenseDashboard>
       duration: const Duration(milliseconds: 700),
     )..repeat(reverse: true);
     _loadStats();
-    _connectBle(); // ✅ Auto-connect when entering dashboard
+    _connectBle();
   }
 
   @override
   void dispose() {
     _sub?.cancel();
-    // ❌ Do not disconnect BLE, keep it alive
+    _reconnectTimer?.cancel();
     _heartController.dispose();
     super.dispose();
   }
@@ -64,9 +66,9 @@ class _HeartSenseDashboardState extends State<HeartSenseDashboard>
     }
   }
 
-  // ✅ Connect to BLE using shared service
+  /// ✅ Connect BLE with auto-reconnect logic
   Future<void> _connectBle() async {
-    if (_isScanning || _isConnected) return;
+    if (_isScanning) return;
 
     setState(() => _isScanning = true);
     try {
@@ -76,6 +78,7 @@ class _HeartSenseDashboardState extends State<HeartSenseDashboard>
       setState(() {
         _isConnected = true;
         _isScanning = false;
+        _reconnectAttempts = 0;
       });
 
       if (mounted) {
@@ -84,6 +87,7 @@ class _HeartSenseDashboardState extends State<HeartSenseDashboard>
         ).showSnackBar(const SnackBar(content: Text('✅ Connected to ESP32')));
       }
 
+      _sub?.cancel();
       _sub = _ble.dataStream?.listen(
         (data) async {
           final (bpm, temp) = data;
@@ -99,20 +103,48 @@ class _HeartSenseDashboardState extends State<HeartSenseDashboard>
 
           _loadStats();
         },
-        onError: (err) async {
-          debugPrint('BLE stream error: $err');
-          setState(() => _isConnected = false);
-          await Future.delayed(const Duration(seconds: 3));
-          if (mounted) _connectBle(); // ✅ Auto-reconnect
+        onError: (err) {
+          debugPrint('❌ BLE stream error: $err');
+          _handleDisconnect();
+        },
+        onDone: () {
+          debugPrint('❌ BLE stream closed');
+          _handleDisconnect();
         },
       );
     } catch (e) {
       setState(() => _isScanning = false);
+      _handleDisconnect();
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Connection failed: $e')));
+        ).showSnackBar(SnackBar(content: Text('⚠️ Connection failed: $e')));
       }
+    }
+  }
+
+  /// 🧠 Handle BLE disconnection
+  void _handleDisconnect() {
+    if (!_isConnected) return;
+    setState(() => _isConnected = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('⚠️ Disconnected — tap "Reconnect Device" to retry'),
+        duration: Duration(seconds: 3),
+      ),
+    );
+
+    // 🔄 Auto-reconnect every 5 sec (max 3 times)
+    if (_reconnectAttempts < 3) {
+      _reconnectTimer?.cancel();
+      _reconnectTimer = Timer(const Duration(seconds: 5), () async {
+        _reconnectAttempts++;
+        debugPrint("🔁 Reconnect attempt $_reconnectAttempts...");
+        await _connectBle();
+      });
+    } else {
+      debugPrint("🛑 Max reconnect attempts reached");
     }
   }
 
@@ -200,7 +232,6 @@ class _HeartSenseDashboardState extends State<HeartSenseDashboard>
                     ),
                   ),
                   const SizedBox(height: 10),
-                  // 🌡️ Temperature
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -218,23 +249,29 @@ class _HeartSenseDashboardState extends State<HeartSenseDashboard>
                   ),
                   const SizedBox(height: 20),
                   ElevatedButton.icon(
-                    onPressed: _isConnected ? null : _connectBle,
+                    onPressed: _isScanning
+                        ? null
+                        : _isConnected
+                        ? null
+                        : _connectBle,
                     icon: Icon(
                       _isConnected
                           ? Icons.bluetooth_connected
-                          : Icons.bluetooth_searching,
+                          : Icons.bluetooth_disabled,
                       color: Colors.white,
                     ),
                     label: Text(
                       _isConnected
                           ? "Connected to ESP32"
-                          : (_isScanning
-                                ? "Scanning..."
-                                : "Connect BLE Device"),
+                          : _isScanning
+                          ? "Scanning..."
+                          : "Reconnect Device",
                       style: const TextStyle(color: Colors.white),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: colorScheme.primary,
+                      backgroundColor: _isConnected
+                          ? const Color(0xFF10B981)
+                          : colorScheme.primary,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(30),
                       ),

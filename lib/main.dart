@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'models/user_model.dart';
 import 'models/history_model.dart';
 import 'dashboard.dart';
@@ -8,10 +9,11 @@ import 'profile.dart';
 import 'settings.dart';
 import 'login_screen.dart';
 import 'signup_screen.dart';
-import 'summary_screen.dart'; // ✅ หน้าสรุปสุขภาพใหม่
-import 'ble/ble_manager.dart'; // ✅ BLE Manager
+import 'summary_screen.dart';
+import 'ble/ble_manager.dart';
+import 'background_service.dart'; // ✅ เพิ่ม Background Monitoring
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // ✅ Initialize Hive
@@ -26,7 +28,29 @@ void main() async {
   // ✅ Initialize BLE
   BleManager().init();
 
+  // ✅ เริ่ม Background Service สำหรับแจ้งเตือน
+  await initializeService();
+
+  // ✅ ขอ Permission ที่จำเป็น
+  await _requestPermissions();
+
   runApp(const HeartSenseApp());
+}
+
+// ✅ ฟังก์ชันขอ Permission ทั้งหมด
+Future<void> _requestPermissions() async {
+  await [
+    Permission.bluetooth,
+    Permission.bluetoothScan,
+    Permission.bluetoothConnect,
+    Permission.locationWhenInUse,
+    Permission.ignoreBatteryOptimizations,
+  ].request();
+
+  // 🔔 ขอสิทธิ์แจ้งเตือน (เฉพาะ Android 13+)
+  if (await Permission.notification.isDenied) {
+    await Permission.notification.request();
+  }
 }
 
 class HeartSenseApp extends StatefulWidget {
@@ -105,7 +129,7 @@ class _HeartSenseAppState extends State<HeartSenseApp> {
         '/history': (context) => const HistoryScreen(),
         '/profile': (context) => const ProfileScreen(),
         '/settings': (context) => SettingsScreen(onThemeChanged: _toggleTheme),
-        '/summary': (context) => const SummaryScreen(), // ✅ ใช้หน้า summary แทน
+        '/summary': (context) => const SummaryScreen(),
       },
     );
   }

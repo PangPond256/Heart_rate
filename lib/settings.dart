@@ -17,22 +17,29 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _isDark = false;
+  bool _notificationsEnabled = true; // ✅ toggle แจ้งเตือน
 
   @override
   void initState() {
     super.initState();
-    _loadTheme();
+    _loadSettings();
   }
 
-  Future<void> _loadTheme() async {
+  // ✅ โหลดค่าจาก Hive
+  Future<void> _loadSettings() async {
     final box = await Hive.openBox('settings');
     if (mounted) {
       setState(() {
         _isDark = box.get('darkMode', defaultValue: false);
+        _notificationsEnabled = box.get(
+          'notificationsEnabled',
+          defaultValue: true,
+        );
       });
     }
   }
 
+  // ✅ toggle dark mode
   Future<void> _toggleTheme(bool value) async {
     final messenger = ScaffoldMessenger.of(context);
     final box = await Hive.openBox('settings');
@@ -50,6 +57,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // ✅ toggle notifications
+  Future<void> _toggleNotifications(bool value) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final box = await Hive.openBox('settings');
+    await box.put('notificationsEnabled', value);
+
+    if (!mounted) return;
+    setState(() => _notificationsEnabled = value);
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          value ? 'Notifications enabled' : 'Notifications disabled',
+        ),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+  }
+
+  // ✅ ล้างประวัติทั้งหมด
   Future<void> _clearHistory() async {
     final ok = await showDialog<bool>(
       context: context,
@@ -82,6 +109,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  // ✅ ออกจากระบบ
   Future<void> _logout(BuildContext context) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -175,6 +203,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 8),
+
+          // ✅ Dark mode toggle
           SwitchListTile(
             title: const Text(
               'Dark Mode',
@@ -187,6 +217,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               color: Color(0xFF1E3A8A),
             ),
           ),
+
+          // ✅ Notification toggle
+          SwitchListTile(
+            title: const Text(
+              'Notifications',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            value: _notificationsEnabled,
+            onChanged: _toggleNotifications,
+            secondary: const Icon(
+              Icons.notifications_active_outlined,
+              color: Color(0xFF1E3A8A),
+            ),
+          ),
+
           const Divider(height: 32),
 
           const Text(
@@ -241,7 +286,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 
 // ----------------------------------------------------------
-// ✅ Change Password Screen (คงไว้เหมือนเดิม)
+// ✅ Change Password Screen
 // ----------------------------------------------------------
 
 class ChangePasswordScreen extends StatefulWidget {

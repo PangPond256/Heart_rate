@@ -2,11 +2,9 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!-- ✅ Bluetooth permissions -->
-    <!-- สำหรับ Android 12+ (API 31 ขึ้นไป) -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <!-- ถ้าต้องการโฆษณา BLE (ไม่จำเป็นสำหรับอ่านค่า) -->
-    <!-- <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" /> -->
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" android:required="false" />
 
     <!-- สำหรับ Android 11 ลงมา -->
     <uses-permission android:name="android.permission.BLUETOOTH"
@@ -14,22 +12,24 @@
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
         android:maxSdkVersion="30" />
 
-    <!-- การสแกน BLE ก่อน Android 12 ต้องใช้ Location -->
+    <!-- ✅ การสแกน BLE ก่อน Android 12 ต้องใช้ Location -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"
         android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"
         android:maxSdkVersion="30" />
 
-    <!-- ✅ สำหรับการทำงาน BLE แบบ background หรือ foreground service -->
+    <!-- ✅ Background Service -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-
-    <!-- ✅ อนุญาตให้ทำงานเบื้องหลังต่อเมื่อปิดจอ -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
-    <!-- ✅ ประกาศว่าอุปกรณ์รองรับ BLE -->
+    <!-- ✅ สำหรับแจ้งเตือน -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- ✅ อุปกรณ์รองรับ BLE -->
     <uses-feature
         android:name="android.hardware.bluetooth_le"
         android:required="false" />
@@ -46,7 +46,20 @@
         <service
             android:name="id.flutter.background_service.BackgroundService"
             android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice|dataSync|health" />
+
+        <!-- ✅ Notification Channel -->
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
             android:exported="false" />
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver"
+            android:exported="false" />
+        <service
+            android:name="com.dexterous.flutterlocalnotifications.ForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice|health|dataSync" />
 
         <!-- ✅ Activity หลักของแอป -->
         <activity
@@ -75,12 +88,11 @@
             android:value="2" />
     </application>
 
-    <!-- ✅ อนุญาตให้ค้นหา Intent ที่ใช้ Bluetooth หรือแชร์ข้อความ -->
+    <!-- ✅ Allow sharing intents -->
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
             <data android:mimeType="text/plain" />
         </intent>
     </queries>
-
 </manifest>
