@@ -11,19 +11,18 @@ import 'package:hive_flutter/hive_flutter.dart';
 /// 🔔 ตัวแปรหลัก
 final FlutterLocalNotificationsPlugin _notifications =
     FlutterLocalNotificationsPlugin();
-final AudioPlayer _player = AudioPlayer();
 
 /// ✅ เริ่มต้น Background Service
 Future<void> initializeService() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
 
-  // ✅ สร้าง Notification Channel สำหรับ foreground service
+  // ✅ Notification Channel สำหรับ Foreground Service
   const AndroidNotificationChannel serviceChannel = AndroidNotificationChannel(
-    'heart_monitor', // ต้องตรงกับ notificationChannelId ด้านล่าง
+    'heart_monitor',
     'Heart Monitor Service',
     description: 'Foreground service for continuous heart rate monitoring',
-    importance: Importance.low, // ไม่ต้องมีเสียงเตือน
+    importance: Importance.low,
   );
 
   final FlutterLocalNotificationsPlugin notifications =
@@ -36,25 +35,20 @@ Future<void> initializeService() async {
       ?.createNotificationChannel(serviceChannel);
 
   // ✅ ตั้งค่า Notification Initialization
-  const AndroidInitializationSettings androidInit =
-      AndroidInitializationSettings('@mipmap/ic_launcher');
-  const DarwinInitializationSettings iosInit = DarwinInitializationSettings();
   const InitializationSettings initSettings = InitializationSettings(
-    android: androidInit,
-    iOS: iosInit,
+    android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+    iOS: DarwinInitializationSettings(),
   );
-
   await notifications.initialize(initSettings);
 
   // ✅ ตั้งค่า Background Service
   final service = FlutterBackgroundService();
-
   await service.configure(
     androidConfiguration: AndroidConfiguration(
       onStart: onStart,
       autoStart: true,
       isForegroundMode: true,
-      notificationChannelId: 'heart_monitor', // ต้องตรงกับที่สร้างไว้
+      notificationChannelId: 'heart_monitor',
       initialNotificationTitle: 'Heart Monitor Active',
       initialNotificationContent: 'Monitoring your heart rate...',
       foregroundServiceNotificationId: 888,
@@ -82,12 +76,21 @@ void onStart(ServiceInstance service) async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
 
-  // ✅ สร้าง Notification Channel สำหรับการแจ้งเตือน BPM ผิดปกติ
+  // ✅ สร้าง AudioPlayer สำหรับ isolate นี้
+  final player = AudioPlayer();
+  await player.setReleaseMode(ReleaseMode.stop);
+
+  // ✅ Channel สำหรับการแจ้งเตือน BPM ผิดปกติ (มีเสียง)
   const AndroidNotificationChannel alertChannel = AndroidNotificationChannel(
     'heart_alerts',
     'Heart Alerts',
     description: 'Alert channel for abnormal heart rates',
     importance: Importance.max,
+    playSound: true,
+    enableVibration: true,
+    sound: RawResourceAndroidNotificationSound(
+      'alert',
+    ), // ใช้ alert.mp3 จาก res/raw
   );
 
   await _notifications
@@ -98,6 +101,8 @@ void onStart(ServiceInstance service) async {
 
   // ✅ เริ่มการสแกนหาอุปกรณ์ ESP32
   FlutterBluePlus.startScan(timeout: const Duration(seconds: 6));
+
+  DateTime? lastSavedTime;
 
   FlutterBluePlus.scanResults.listen((results) async {
     for (final r in results) {
@@ -137,20 +142,32 @@ void onStart(ServiceInstance service) async {
             final temp = double.tryParse(parts.length > 1 ? parts[1] : '') ?? 0;
 
             final box = await Hive.openBox('settings');
+            final historyBox = await Hive.openBox('history');
             final notifyEnabled = box.get(
               'notificationsEnabled',
               defaultValue: true,
             );
 
-            if (!notifyEnabled) {
-              debugPrint('🔕 Notifications disabled by user.');
-              return;
+            final now = DateTime.now();
+
+            // ✅ เก็บข้อมูลทุก 30 นาที
+            if (lastSavedTime == null ||
+                now.difference(lastSavedTime!).inMinutes >= 30) {
+              lastSavedTime = now;
+              await historyBox.add({
+                'timestamp': now.toIso8601String(),
+                'bpm': bpm,
+                'temp': temp,
+              });
+              debugPrint('🕒 Saved history at $now (BPM: $bpm, Temp: $temp)');
             }
 
-            // ✅ ตรวจจับค่าผิดปกติ
-            if (bpm < 50 || bpm > 120) {
-              await _player.stop();
-              await _player.play(AssetSource('sounds/alert.mp3'));
+            // ✅ ตรวจจับค่าผิดปกติ (แจ้งเตือนพร้อมเสียง)
+            if (notifyEnabled && (bpm < 50 || bpm > 120)) {
+              await player.stop();
+              await player.play(
+                AssetSource('sounds/alert.mp3'),
+              ); // จาก assets/sounds/
 
               await _notifications.show(
                 0,
@@ -166,6 +183,7 @@ void onStart(ServiceInstance service) async {
                     priority: Priority.high,
                     playSound: true,
                     enableVibration: true,
+                    sound: RawResourceAndroidNotificationSound('alert'),
                     visibility: NotificationVisibility.public,
                   ),
                   iOS: DarwinNotificationDetails(
