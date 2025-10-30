@@ -17,7 +17,7 @@ Future<void> initializeService() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
 
-  // ✅ Notification Channel สำหรับ Foreground Service
+  // ✅ สร้าง Notification Channel
   const AndroidNotificationChannel serviceChannel = AndroidNotificationChannel(
     'heart_monitor',
     'Heart Monitor Service',
@@ -34,7 +34,7 @@ Future<void> initializeService() async {
       >()
       ?.createNotificationChannel(serviceChannel);
 
-  // ✅ การตั้งค่าเริ่มต้นของ Notification
+  // ✅ การตั้งค่า Notification เริ่มต้น
   const InitializationSettings initSettings = InitializationSettings(
     android: AndroidInitializationSettings('@mipmap/ic_launcher'),
     iOS: DarwinInitializationSettings(),
@@ -79,19 +79,16 @@ void onStart(ServiceInstance service) async {
   final player = AudioPlayer();
   await player.setReleaseMode(ReleaseMode.stop);
 
-  // ✅ เปิด Hive boxes
   final settingsBox = await Hive.openBox('settings');
   final historyBox = await Hive.openBox('history');
 
-  // ✅ โหลดเวลาบันทึกล่าสุดจาก Hive
   DateTime? lastSavedTime;
   final savedTimeStr = settingsBox.get('lastSavedTime');
   if (savedTimeStr != null) {
     lastSavedTime = DateTime.tryParse(savedTimeStr);
-    debugPrint("🕓 Last saved time loaded: $lastSavedTime");
   }
 
-  // ✅ Channel สำหรับแจ้งเตือนหัวใจเต้นผิดปกติ
+  // ✅ Notification สำหรับเตือนเมื่อหัวใจเต้นผิดปกติ
   const AndroidNotificationChannel alertChannel = AndroidNotificationChannel(
     'heart_alerts',
     'Heart Alerts',
@@ -108,49 +105,49 @@ void onStart(ServiceInstance service) async {
       >()
       ?.createNotificationChannel(alertChannel);
 
-  // ✅ เริ่มสแกนหา ESP32
-  FlutterBluePlus.startScan(timeout: const Duration(seconds: 6));
-
   BluetoothDevice? connectedDevice;
+  BluetoothCharacteristic? notifyChar;
 
-  FlutterBluePlus.scanResults.listen((results) async {
-    for (final r in results) {
-      if (r.device.platformName.contains('ESP32')) {
-        await FlutterBluePlus.stopScan();
+  // ✅ ฟังก์ชันเชื่อมต่อและอ่านค่าจาก ESP32
+  Future<void> connectAndRead() async {
+    FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
 
-        try {
+    FlutterBluePlus.scanResults.listen((results) async {
+      for (final r in results) {
+        if (r.device.platformName.contains('ESP32')) {
+          await FlutterBluePlus.stopScan();
           connectedDevice = r.device;
-          await connectedDevice!.connect(autoConnect: false);
-          debugPrint('✅ Connected to ${r.device.platformName}');
-        } catch (e) {
-          debugPrint('❌ Connect error: $e');
-          continue;
-        }
 
-        // ✅ ค้นหา Service และ Characteristic
-        final services = await connectedDevice!.discoverServices();
-        BluetoothCharacteristic? notifyChar;
-
-        for (final s in services) {
-          for (final c in s.characteristics) {
-            if (c.uuid.toString().toUpperCase() ==
-                '6E400003-B5A3-F393-E0A9-E50E24DCCA9E') {
-              notifyChar = c;
-              break;
-            }
-          }
-          if (notifyChar != null) break;
-        }
-
-        if (notifyChar == null) {
-          debugPrint('❌ Notify characteristic not found!');
-          return;
-        }
-
-        await notifyChar.setNotifyValue(true);
-
-        notifyChar.onValueReceived.listen((data) async {
           try {
+            await connectedDevice!.connect(autoConnect: false);
+            debugPrint('✅ Connected to ${r.device.platformName}');
+          } catch (e) {
+            debugPrint('❌ Connect error: $e');
+            return;
+          }
+
+          final services = await connectedDevice!.discoverServices();
+          for (final s in services) {
+            for (final c in s.characteristics) {
+              if (c.uuid.toString().toUpperCase() ==
+                  '6E400003-B5A3-F393-E0A9-E50E24DCCA9E') {
+                notifyChar = c;
+                break;
+              }
+            }
+            if (notifyChar != null) break;
+          }
+
+          if (notifyChar == null) {
+            debugPrint('❌ Notify characteristic not found!');
+            return;
+          }
+
+          // ✅ เปิดรับค่าชั่วคราว
+          await notifyChar!.setNotifyValue(true);
+          debugPrint("📡 Listening for 10 seconds...");
+
+          final sub = notifyChar!.onValueReceived.listen((data) async {
             final line = String.fromCharCodes(data).trim();
             if (line.isEmpty) return;
 
@@ -164,7 +161,7 @@ void onStart(ServiceInstance service) async {
 
             final now = DateTime.now();
 
-            // ✅ เก็บข้อมูลทุก 30 นาทีจริง ๆ
+            // ✅ เก็บข้อมูลแค่ครั้งเดียวในรอบ 30 นาที
             if (lastSavedTime == null ||
                 now.difference(lastSavedTime!).inMinutes >= 30) {
               lastSavedTime = now;
@@ -176,7 +173,22 @@ void onStart(ServiceInstance service) async {
                 'temp': temp,
               });
 
-              debugPrint('💾 [BG] Saved at $now → BPM: $bpm, Temp: $temp');
+              debugPrint('💾 Saved data → BPM: $bpm, Temp: $temp');
+
+              // ✅ แจ้งเตือนเล็ก ๆ ว่าบันทึกแล้ว
+              await _notifications.show(
+                1,
+                '✅ Data Saved',
+                'Heart data recorded at ${now.hour}:${now.minute.toString().padLeft(2, '0')}',
+                const NotificationDetails(
+                  android: AndroidNotificationDetails(
+                    'heart_monitor',
+                    'Heart Monitor Service',
+                    importance: Importance.low,
+                    priority: Priority.low,
+                  ),
+                ),
+              );
             }
 
             // ✅ แจ้งเตือนเมื่อค่าผิดปกติ
@@ -198,7 +210,6 @@ void onStart(ServiceInstance service) async {
                     playSound: true,
                     enableVibration: true,
                     sound: RawResourceAndroidNotificationSound('alert'),
-                    visibility: NotificationVisibility.public,
                   ),
                   iOS: DarwinNotificationDetails(
                     presentSound: true,
@@ -208,29 +219,31 @@ void onStart(ServiceInstance service) async {
                 ),
               );
             }
-          } catch (e, st) {
-            debugPrint('⚠️ Parse error: $e');
-            debugPrint(st.toString());
-          }
-        });
+          });
 
-        // ✅ ตรวจสอบ reconnect
-        connectedDevice!.connectionState.listen((state) async {
-          if (state == BluetoothConnectionState.disconnected) {
-            debugPrint('🔁 Device disconnected — retry in 10s...');
-            await Future.delayed(const Duration(seconds: 10));
-            try {
-              await connectedDevice!.connect(autoConnect: false);
-            } catch (_) {}
-          }
-        });
+          // ✅ ปิดการฟังหลังจาก 10 วินาที
+          await Future.delayed(const Duration(seconds: 10));
+          await notifyChar!.setNotifyValue(false);
+          await sub.cancel();
+          debugPrint("🛑 Stop listening and disconnect.");
 
-        break;
+          await connectedDevice!.disconnect();
+          return;
+        }
       }
-    }
+    });
+  }
+
+  // ✅ เรียกฟังก์ชันครั้งแรกทันที
+  await connectAndRead();
+
+  // ✅ ตั้งเวลาเรียกทุก 30 นาที
+  Timer.periodic(const Duration(minutes: 30), (timer) async {
+    debugPrint("🔁 Timer triggered — reconnect and read...");
+    await connectAndRead();
   });
 
-  // ✅ ป้องกันไม่ให้ระบบปิด service เอง
+  // ✅ กันระบบปิด service เอง
   Timer.periodic(const Duration(minutes: 15), (timer) {
     service.invoke('keepAlive', {});
   });
