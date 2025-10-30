@@ -17,7 +17,7 @@ Future<void> initializeService() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
 
-  // ✅ สร้าง Notification Channel สำหรับ foreground service
+  // ✅ Notification Channel สำหรับ Foreground Service
   const AndroidNotificationChannel serviceChannel = AndroidNotificationChannel(
     'heart_monitor',
     'Heart Monitor Service',
@@ -34,6 +34,7 @@ Future<void> initializeService() async {
       >()
       ?.createNotificationChannel(serviceChannel);
 
+  // ✅ การตั้งค่าเริ่มต้นของ Notification
   const InitializationSettings initSettings = InitializationSettings(
     android: AndroidInitializationSettings('@mipmap/ic_launcher'),
     iOS: DarwinInitializationSettings(),
@@ -78,7 +79,19 @@ void onStart(ServiceInstance service) async {
   final player = AudioPlayer();
   await player.setReleaseMode(ReleaseMode.stop);
 
-  // ✅ Channel สำหรับแจ้งเตือนเมื่อหัวใจเต้นผิดปกติ
+  // ✅ เปิด Hive boxes
+  final settingsBox = await Hive.openBox('settings');
+  final historyBox = await Hive.openBox('history');
+
+  // ✅ โหลดเวลาบันทึกล่าสุดจาก Hive
+  DateTime? lastSavedTime;
+  final savedTimeStr = settingsBox.get('lastSavedTime');
+  if (savedTimeStr != null) {
+    lastSavedTime = DateTime.tryParse(savedTimeStr);
+    debugPrint("🕓 Last saved time loaded: $lastSavedTime");
+  }
+
+  // ✅ Channel สำหรับแจ้งเตือนหัวใจเต้นผิดปกติ
   const AndroidNotificationChannel alertChannel = AndroidNotificationChannel(
     'heart_alerts',
     'Heart Alerts',
@@ -86,9 +99,7 @@ void onStart(ServiceInstance service) async {
     importance: Importance.max,
     playSound: true,
     enableVibration: true,
-    sound: RawResourceAndroidNotificationSound(
-      'alert',
-    ), // ต้องมีไฟล์ใน res/raw/
+    sound: RawResourceAndroidNotificationSound('alert'),
   );
 
   await _notifications
@@ -100,7 +111,6 @@ void onStart(ServiceInstance service) async {
   // ✅ เริ่มสแกนหา ESP32
   FlutterBluePlus.startScan(timeout: const Duration(seconds: 6));
 
-  DateTime? lastSavedTime;
   BluetoothDevice? connectedDevice;
 
   FlutterBluePlus.scanResults.listen((results) async {
@@ -147,26 +157,26 @@ void onStart(ServiceInstance service) async {
             final parts = line.split(',');
             final bpm = double.tryParse(parts.isNotEmpty ? parts[0] : '') ?? 0;
             final temp = double.tryParse(parts.length > 1 ? parts[1] : '') ?? 0;
-
-            final box = await Hive.openBox('settings');
-            final historyBox = await Hive.openBox('history');
-            final notifyEnabled = box.get(
+            final notifyEnabled = settingsBox.get(
               'notificationsEnabled',
               defaultValue: true,
             );
 
             final now = DateTime.now();
 
-            // ✅ เก็บข้อมูลทุก ๆ 30 นาทีเท่านั้น
+            // ✅ เก็บข้อมูลทุก 30 นาทีจริง ๆ
             if (lastSavedTime == null ||
                 now.difference(lastSavedTime!).inMinutes >= 30) {
               lastSavedTime = now;
+              await settingsBox.put('lastSavedTime', now.toIso8601String());
+
               await historyBox.add({
                 'timestamp': now.toIso8601String(),
                 'bpm': bpm,
                 'temp': temp,
               });
-              debugPrint('💾 Saved at $now → BPM: $bpm, Temp: $temp');
+
+              debugPrint('💾 [BG] Saved at $now → BPM: $bpm, Temp: $temp');
             }
 
             // ✅ แจ้งเตือนเมื่อค่าผิดปกติ
@@ -204,10 +214,10 @@ void onStart(ServiceInstance service) async {
           }
         });
 
-        // ✅ ตรวจสอบการเชื่อมต่อซ้ำ (reconnect ถ้าหลุด)
+        // ✅ ตรวจสอบ reconnect
         connectedDevice!.connectionState.listen((state) async {
           if (state == BluetoothConnectionState.disconnected) {
-            debugPrint('🔁 Device disconnected — retrying in 10s...');
+            debugPrint('🔁 Device disconnected — retry in 10s...');
             await Future.delayed(const Duration(seconds: 10));
             try {
               await connectedDevice!.connect(autoConnect: false);
@@ -220,7 +230,7 @@ void onStart(ServiceInstance service) async {
     }
   });
 
-  // ✅ ป้องกันระบบปิด service เอง
+  // ✅ ป้องกันไม่ให้ระบบปิด service เอง
   Timer.periodic(const Duration(minutes: 15), (timer) {
     service.invoke('keepAlive', {});
   });
