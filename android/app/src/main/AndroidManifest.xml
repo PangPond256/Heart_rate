@@ -1,8 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+    xmlns:tools="http://schemas.android.com/tools"
+    package="com.example.smart_heart">
 
-    <!-- ✅ Bluetooth permissions -->
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <!-- ✅ Bluetooth (Android 12+) -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation"/>
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" android:required="false" />
 
@@ -32,7 +33,7 @@
     <!-- ================== APP CONFIG ================== -->
     <application
         android:name="${applicationName}"
-        android:label="smart_heart"
+        android:label="Smart Heart"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true"
         tools:ignore="MissingApplicationIcon">
@@ -42,14 +43,14 @@
             android:name="flutter_background_service.default_notification_channel_id"
             android:value="heart_monitor" />
 
-        <!-- ✅ Service สำหรับ Background -->
+        <!-- ✅ Background Service -->
         <service
             android:name="id.flutter.background_service.BackgroundService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="connectedDevice|dataSync|health" />
 
-        <!-- ✅ Notification Channel -->
+        <!-- ✅ Notification Channel (Flutter Local Notifications) -->
         <receiver
             android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
             android:exported="false" />
@@ -60,6 +61,16 @@
             android:name="com.dexterous.flutterlocalnotifications.ForegroundService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice|health|dataSync" />
+
+        <!-- ✅ เรียกใช้ Service หลัง Boot -->
+        <receiver
+            android:name="androidx.work.impl.background.systemalarm.RescheduleReceiver"
+            android:enabled="true"
+            android:exported="false" />
+        <receiver
+            android:name="androidx.work.impl.background.systemalarm.ConstraintProxyUpdateReceiver"
+            android:enabled="true"
+            android:exported="false" />
 
         <!-- ✅ Activity หลักของแอป -->
         <activity
@@ -93,4 +104,5 @@
             <data android:mimeType="text/plain" />
         </intent>
     </queries>
+
 </manifest>
