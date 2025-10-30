@@ -1,5 +1,6 @@
+// lib/background_service.dart
 import 'dart:async';
-import 'package:flutter/widgets.dart'; // ✅ ต้องมี
+import 'package:flutter/widgets.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -14,10 +15,27 @@ final AudioPlayer _player = AudioPlayer();
 
 /// ✅ เริ่มต้น Background Service
 Future<void> initializeService() async {
-  WidgetsFlutterBinding.ensureInitialized(); // ✅ ป้องกัน crash
-  await Hive.initFlutter(); // ✅ ให้ Hive พร้อมใช้ใน isolate
+  WidgetsFlutterBinding.ensureInitialized();
+  await Hive.initFlutter();
 
-  // ตั้งค่า Notification สำหรับ Android & iOS
+  // ✅ สร้าง Notification Channel สำหรับ foreground service
+  const AndroidNotificationChannel serviceChannel = AndroidNotificationChannel(
+    'heart_monitor', // ต้องตรงกับ notificationChannelId ด้านล่าง
+    'Heart Monitor Service',
+    description: 'Foreground service for continuous heart rate monitoring',
+    importance: Importance.low, // ไม่ต้องมีเสียงเตือน
+  );
+
+  final FlutterLocalNotificationsPlugin notifications =
+      FlutterLocalNotificationsPlugin();
+
+  await notifications
+      .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin
+      >()
+      ?.createNotificationChannel(serviceChannel);
+
+  // ✅ ตั้งค่า Notification Initialization
   const AndroidInitializationSettings androidInit =
       AndroidInitializationSettings('@mipmap/ic_launcher');
   const DarwinInitializationSettings iosInit = DarwinInitializationSettings();
@@ -26,8 +44,9 @@ Future<void> initializeService() async {
     iOS: iosInit,
   );
 
-  await _notifications.initialize(initSettings);
+  await notifications.initialize(initSettings);
 
+  // ✅ ตั้งค่า Background Service
   final service = FlutterBackgroundService();
 
   await service.configure(
@@ -35,7 +54,7 @@ Future<void> initializeService() async {
       onStart: onStart,
       autoStart: true,
       isForegroundMode: true,
-      notificationChannelId: 'heart_monitor',
+      notificationChannelId: 'heart_monitor', // ต้องตรงกับที่สร้างไว้
       initialNotificationTitle: 'Heart Monitor Active',
       initialNotificationContent: 'Monitoring your heart rate...',
       foregroundServiceNotificationId: 888,
@@ -60,11 +79,11 @@ bool onIosBackground(ServiceInstance service) {
 /// ✅ ฟังก์ชันเริ่มเมื่อ Service ทำงาน
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) async {
-  WidgetsFlutterBinding.ensureInitialized(); // ✅ สำคัญมาก
-  await Hive.initFlutter(); // ✅ เพื่อใช้ Hive ได้ใน isolate
+  WidgetsFlutterBinding.ensureInitialized();
+  await Hive.initFlutter();
 
-  // ✅ ตั้งค่า Notification Channel
-  const AndroidNotificationChannel channel = AndroidNotificationChannel(
+  // ✅ สร้าง Notification Channel สำหรับการแจ้งเตือน BPM ผิดปกติ
+  const AndroidNotificationChannel alertChannel = AndroidNotificationChannel(
     'heart_alerts',
     'Heart Alerts',
     description: 'Alert channel for abnormal heart rates',
@@ -75,19 +94,18 @@ void onStart(ServiceInstance service) async {
       .resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin
       >()
-      ?.createNotificationChannel(channel);
+      ?.createNotificationChannel(alertChannel);
 
-  // ✅ เริ่มสแกนหาอุปกรณ์ ESP32
+  // ✅ เริ่มการสแกนหาอุปกรณ์ ESP32
   FlutterBluePlus.startScan(timeout: const Duration(seconds: 6));
 
   FlutterBluePlus.scanResults.listen((results) async {
     for (final r in results) {
-      // ✅ ใช้ platformName แทน name (ป้องกัน deprecated)
       if (r.device.platformName.contains('ESP32')) {
         await FlutterBluePlus.stopScan();
         await r.device.connect(autoConnect: false);
 
-        // ค้นหา Service และ Characteristic
+        // ✅ ค้นหา Service และ Characteristic
         final services = await r.device.discoverServices();
         BluetoothCharacteristic? notifyChar;
 
@@ -118,7 +136,6 @@ void onStart(ServiceInstance service) async {
             final bpm = double.tryParse(parts.isNotEmpty ? parts[0] : '') ?? 0;
             final temp = double.tryParse(parts.length > 1 ? parts[1] : '') ?? 0;
 
-            // ✅ อ่านค่า settings ก่อนแจ้งเตือน
             final box = await Hive.openBox('settings');
             final notifyEnabled = box.get(
               'notificationsEnabled',
