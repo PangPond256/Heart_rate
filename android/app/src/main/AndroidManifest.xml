@@ -6,17 +6,13 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" android:required="false" />
 
-    <!-- สำหรับ Android 11 ลงมา -->
-    <uses-permission android:name="android.permission.BLUETOOTH"
-        android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
-        android:maxSdkVersion="30" />
+    <!-- ✅ สำหรับ Android 11 ลงมา -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
 
     <!-- ✅ การสแกน BLE ก่อน Android 12 ต้องใช้ Location -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"
-        android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"
-        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" android:maxSdkVersion="30" />
 
     <!-- ✅ Background Service -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -25,22 +21,26 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- ✅ สำหรับแจ้งเตือน -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- ✅ อุปกรณ์รองรับ BLE -->
-    <uses-feature
-        android:name="android.hardware.bluetooth_le"
-        android:required="false" />
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
 
     <!-- ================== APP CONFIG ================== -->
     <application
-        android:label="smart_heart"
         android:name="${applicationName}"
+        android:label="smart_heart"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true"
         tools:ignore="MissingApplicationIcon">
+
+        <!-- ✅ Meta-data สำหรับ background service -->
+        <meta-data
+            android:name="flutter_background_service.default_notification_channel_id"
+            android:value="heart_monitor" />
 
         <!-- ✅ Service สำหรับ Background -->
         <service
@@ -66,12 +66,10 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
-
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme" />
@@ -82,7 +80,7 @@
             </intent-filter>
         </activity>
 
-        <!-- ✅ สำหรับ Flutter -->
+        <!-- ✅ Flutter Embed -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

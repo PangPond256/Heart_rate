@@ -11,8 +11,11 @@ import 'login_screen.dart';
 import 'signup_screen.dart';
 import 'summary_screen.dart';
 import 'ble/ble_manager.dart';
-import 'background_service.dart'; // ✅ เพิ่ม Background Monitoring
+import 'background_service.dart'; // ✅ Background Monitoring
 
+// ---------------------------------------------------------
+// 🚀 MAIN ENTRY POINT
+// ---------------------------------------------------------
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -25,34 +28,45 @@ Future<void> main() async {
   await Hive.openBox('settings');
   await Hive.openBox('session');
 
-  // ✅ Initialize BLE
+  // ✅ Initialize BLE Manager
   BleManager().init();
 
-  // ✅ เริ่ม Background Service สำหรับแจ้งเตือน
-  await initializeService();
-
-  // ✅ ขอ Permission ที่จำเป็น
+  // ✅ ขอ Permission ก่อนเริ่ม Service (สำคัญมาก)
   await _requestPermissions();
+
+  // ✅ เริ่ม Background Service
+  await initializeService();
 
   runApp(const HeartSenseApp());
 }
 
-// ✅ ฟังก์ชันขอ Permission ทั้งหมด
+// ---------------------------------------------------------
+// 🔐 ฟังก์ชันขอ Permission ทั้งหมด (Bluetooth, Location, Notification)
+// ---------------------------------------------------------
 Future<void> _requestPermissions() async {
-  await [
+  final statuses = await [
     Permission.bluetooth,
     Permission.bluetoothScan,
     Permission.bluetoothConnect,
     Permission.locationWhenInUse,
     Permission.ignoreBatteryOptimizations,
+    Permission.notification,
   ].request();
 
-  // 🔔 ขอสิทธิ์แจ้งเตือน (เฉพาะ Android 13+)
-  if (await Permission.notification.isDenied) {
-    await Permission.notification.request();
+  // ⚠️ ถ้ามีสิทธิ์ที่ถูกปฏิเสธ
+  if (statuses.values.any((status) => status.isDenied)) {
+    debugPrint('⚠️ Some permissions were denied.');
+  }
+
+  // ✅ ถ้าผู้ใช้ปฏิเสธถาวร ให้เปิดหน้า Settings
+  if (statuses.values.any((status) => status.isPermanentlyDenied)) {
+    await openAppSettings();
   }
 }
 
+// ---------------------------------------------------------
+// 💓 ตัวหลักของแอป
+// ---------------------------------------------------------
 class HeartSenseApp extends StatefulWidget {
   const HeartSenseApp({super.key});
 
@@ -71,6 +85,7 @@ class _HeartSenseAppState extends State<HeartSenseApp> {
 
   Future<void> _loadTheme() async {
     final box = await Hive.openBox('settings');
+    if (!mounted) return; // ✅ ป้องกัน setState หลัง widget ถูก dispose
     setState(() {
       _isDark = box.get('darkMode', defaultValue: false);
     });
@@ -79,11 +94,13 @@ class _HeartSenseAppState extends State<HeartSenseApp> {
   void _toggleTheme(bool value) async {
     final box = await Hive.openBox('settings');
     await box.put('darkMode', value);
+    if (!mounted) return;
     setState(() => _isDark = value);
   }
 
   @override
   Widget build(BuildContext context) {
+    // ✅ ธีมโหมดสว่าง
     final lightTheme = ThemeData(
       brightness: Brightness.light,
       fontFamily: 'SF Pro Display',
@@ -101,6 +118,7 @@ class _HeartSenseAppState extends State<HeartSenseApp> {
       ),
     );
 
+    // ✅ ธีมโหมดมืด
     final darkTheme = ThemeData(
       brightness: Brightness.dark,
       fontFamily: 'SF Pro Display',
@@ -117,6 +135,7 @@ class _HeartSenseAppState extends State<HeartSenseApp> {
       ),
     );
 
+    // ✅ Routing
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'HeartSense',

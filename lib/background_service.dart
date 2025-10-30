@@ -1,10 +1,11 @@
 import 'dart:async';
+import 'package:flutter/widgets.dart'; // ✅ ต้องมี
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:audioplayers/audioplayers.dart';
-import 'package:hive_flutter/hive_flutter.dart'; // ✅ เพิ่มสำหรับอ่าน settings จาก Hive
+import 'package:hive_flutter/hive_flutter.dart';
 
 /// 🔔 ตัวแปรหลัก
 final FlutterLocalNotificationsPlugin _notifications =
@@ -13,8 +14,8 @@ final AudioPlayer _player = AudioPlayer();
 
 /// ✅ เริ่มต้น Background Service
 Future<void> initializeService() async {
-  // ตั้งค่า Hive (กรณียังไม่ initialize)
-  await Hive.initFlutter();
+  WidgetsFlutterBinding.ensureInitialized(); // ✅ ป้องกัน crash
+  await Hive.initFlutter(); // ✅ ให้ Hive พร้อมใช้ใน isolate
 
   // ตั้งค่า Notification สำหรับ Android & iOS
   const AndroidInitializationSettings androidInit =
@@ -52,13 +53,16 @@ Future<void> initializeService() async {
 /// ✅ สำหรับ iOS Background Handler
 @pragma('vm:entry-point')
 bool onIosBackground(ServiceInstance service) {
-  print('iOS background fetch triggered');
+  if (kDebugMode) debugPrint('iOS background fetch triggered');
   return true;
 }
 
 /// ✅ ฟังก์ชันเริ่มเมื่อ Service ทำงาน
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) async {
+  WidgetsFlutterBinding.ensureInitialized(); // ✅ สำคัญมาก
+  await Hive.initFlutter(); // ✅ เพื่อใช้ Hive ได้ใน isolate
+
   // ✅ ตั้งค่า Notification Channel
   const AndroidNotificationChannel channel = AndroidNotificationChannel(
     'heart_alerts',
@@ -78,8 +82,8 @@ void onStart(ServiceInstance service) async {
 
   FlutterBluePlus.scanResults.listen((results) async {
     for (final r in results) {
-      // ✅ ชื่ออุปกรณ์ BLE ที่ต้องการเชื่อมต่อ
-      if (r.device.name.contains('ESP32')) {
+      // ✅ ใช้ platformName แทน name (ป้องกัน deprecated)
+      if (r.device.platformName.contains('ESP32')) {
         await FlutterBluePlus.stopScan();
         await r.device.connect(autoConnect: false);
 
@@ -89,7 +93,6 @@ void onStart(ServiceInstance service) async {
 
         for (final s in services) {
           for (final c in s.characteristics) {
-            // ✅ UUID ของ Characteristic ที่ส่งค่ามาจาก ESP32
             if (c.uuid.toString().toUpperCase() ==
                 '6E400003-B5A3-F393-E0A9-E50E24DCCA9E') {
               notifyChar = c;
@@ -99,13 +102,11 @@ void onStart(ServiceInstance service) async {
           if (notifyChar != null) break;
         }
 
-        // ❌ ไม่พบ Characteristic
         if (notifyChar == null) {
-          debugPrint('Characteristic not found!');
+          debugPrint('❌ Characteristic not found!');
           return;
         }
 
-        // ✅ เปิดการแจ้งเตือนค่าใหม่จาก ESP32
         await notifyChar.setNotifyValue(true);
 
         notifyChar.onValueReceived.listen((data) async {
@@ -117,7 +118,7 @@ void onStart(ServiceInstance service) async {
             final bpm = double.tryParse(parts.isNotEmpty ? parts[0] : '') ?? 0;
             final temp = double.tryParse(parts.length > 1 ? parts[1] : '') ?? 0;
 
-            // ✅ อ่านค่า settings ก่อนจะแจ้งเตือน
+            // ✅ อ่านค่า settings ก่อนแจ้งเตือน
             final box = await Hive.openBox('settings');
             final notifyEnabled = box.get(
               'notificationsEnabled',
@@ -126,7 +127,7 @@ void onStart(ServiceInstance service) async {
 
             if (!notifyEnabled) {
               debugPrint('🔕 Notifications disabled by user.');
-              return; // ❌ ถ้าปิดแจ้งเตือน ข้าม
+              return;
             }
 
             // ✅ ตรวจจับค่าผิดปกติ
