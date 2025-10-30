@@ -1,4 +1,3 @@
-// lib/background_service.dart
 import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/foundation.dart';
@@ -30,8 +29,7 @@ Future<void> initializeService() async {
 
   await notifications
       .resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin
-      >()
+          AndroidFlutterLocalNotificationsPlugin>()
       ?.createNotificationChannel(serviceChannel);
 
   // ✅ ตั้งค่า Notification Initialization
@@ -76,11 +74,10 @@ void onStart(ServiceInstance service) async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
 
-  // ✅ สร้าง AudioPlayer สำหรับ isolate นี้
   final player = AudioPlayer();
   await player.setReleaseMode(ReleaseMode.stop);
 
-  // ✅ Channel สำหรับการแจ้งเตือน BPM ผิดปกติ (มีเสียง)
+  // ✅ สร้างช่องแจ้งเตือน BPM ผิดปกติ (พร้อมเสียง)
   const AndroidNotificationChannel alertChannel = AndroidNotificationChannel(
     'heart_alerts',
     'Heart Alerts',
@@ -88,21 +85,27 @@ void onStart(ServiceInstance service) async {
     importance: Importance.max,
     playSound: true,
     enableVibration: true,
-    sound: RawResourceAndroidNotificationSound(
-      'alert',
-    ), // ใช้ alert.mp3 จาก res/raw
+    sound: RawResourceAndroidNotificationSound('alert'),
   );
 
   await _notifications
       .resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin
-      >()
+          AndroidFlutterLocalNotificationsPlugin>()
       ?.createNotificationChannel(alertChannel);
 
-  // ✅ เริ่มการสแกนหาอุปกรณ์ ESP32
-  FlutterBluePlus.startScan(timeout: const Duration(seconds: 6));
+  // ✅ เปิด Hive Box ที่ใช้เก็บข้อมูล
+  final settingsBox = await Hive.openBox('settings');
+  final historyBox = await Hive.openBox('history');
 
+  // ✅ โหลดเวลาบันทึกล่าสุดจาก Hive
   DateTime? lastSavedTime;
+  final lastSavedStr = settingsBox.get('lastSavedTime');
+  if (lastSavedStr != null) {
+    lastSavedTime = DateTime.tryParse(lastSavedStr);
+  }
+
+  // ✅ เริ่มสแกนหาอุปกรณ์ ESP32
+  FlutterBluePlus.startScan(timeout: const Duration(seconds: 6));
 
   FlutterBluePlus.scanResults.listen((results) async {
     for (final r in results) {
@@ -132,6 +135,7 @@ void onStart(ServiceInstance service) async {
 
         await notifyChar.setNotifyValue(true);
 
+        // ✅ เมื่อได้รับค่าจาก ESP32
         notifyChar.onValueReceived.listen((data) async {
           try {
             final line = String.fromCharCodes(data).trim();
@@ -139,35 +143,51 @@ void onStart(ServiceInstance service) async {
 
             final parts = line.split(',');
             final bpm = double.tryParse(parts.isNotEmpty ? parts[0] : '') ?? 0;
-            final temp = double.tryParse(parts.length > 1 ? parts[1] : '') ?? 0;
+            final temp =
+                double.tryParse(parts.length > 1 ? parts[1] : '') ?? 0;
 
-            final box = await Hive.openBox('settings');
-            final historyBox = await Hive.openBox('history');
-            final notifyEnabled = box.get(
+            final notifyEnabled = settingsBox.get(
               'notificationsEnabled',
               defaultValue: true,
             );
 
             final now = DateTime.now();
 
-            // ✅ เก็บข้อมูลทุก 30 นาที
+            // ✅ เก็บข้อมูลทุก 30 นาที (null-safe)
             if (lastSavedTime == null ||
                 now.difference(lastSavedTime!).inMinutes >= 30) {
               lastSavedTime = now;
+              await settingsBox.put('lastSavedTime', now.toIso8601String());
+
               await historyBox.add({
                 'timestamp': now.toIso8601String(),
                 'bpm': bpm,
                 'temp': temp,
               });
-              debugPrint('🕒 Saved history at $now (BPM: $bpm, Temp: $temp)');
+
+              debugPrint('🕒 [BG] Saved at $now | BPM: $bpm | Temp: $temp');
+
+              // 🧹 เก็บแค่ 7 วันล่าสุด
+              if (historyBox.length > 7) {
+                final entries = historyBox.toMap().entries.toList();
+                entries.sort((a, b) {
+                  final timeA = DateTime.tryParse(a.value['timestamp'] ?? '') ??
+                      DateTime.now();
+                  final timeB = DateTime.tryParse(b.value['timestamp'] ?? '') ??
+                      DateTime.now();
+                  return timeA.compareTo(timeB);
+                });
+
+                await historyBox.delete(entries.first.key);
+                debugPrint(
+                    '🧹 Deleted oldest record (${entries.first.value['timestamp']})');
+              }
             }
 
-            // ✅ ตรวจจับค่าผิดปกติ (แจ้งเตือนพร้อมเสียง)
+            // ✅ แจ้งเตือนค่าผิดปกติ
             if (notifyEnabled && (bpm < 50 || bpm > 120)) {
               await player.stop();
-              await player.play(
-                AssetSource('sounds/alert.mp3'),
-              ); // จาก assets/sounds/
+              await player.play(AssetSource('sounds/alert.mp3'));
 
               await _notifications.show(
                 0,
@@ -206,7 +226,7 @@ void onStart(ServiceInstance service) async {
   });
 
   // ✅ ป้องกันไม่ให้ระบบปิด service เอง
-  Timer.periodic(const Duration(minutes: 15), (timer) {
+  Timer.periodic(const Duration(minutes: 15), (_) {
     service.invoke('keepAlive', {});
   });
 }

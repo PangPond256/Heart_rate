@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import 'package:intl/intl.dart';
 import 'package:smart_heart/ble/ble_manager.dart';
-import 'models/history_model.dart'; // ✅ ตรวจสอบให้แน่ใจว่ามีไฟล์นี้ในโฟลเดอร์ models
+import 'models/history_model.dart';
 
 class DeviceControlPage extends StatefulWidget {
   const DeviceControlPage({Key? key}) : super(key: key);
@@ -22,6 +22,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
   bool _connected = false;
 
   Timer? _saveTimer;
+  DateTime? _lastSavedTime; // ✅ เวลาบันทึกล่าสุดจริง (เก็บไว้ใน Hive ด้วย)
 
   @override
   void initState() {
@@ -29,7 +30,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
     _initBleConnection();
   }
 
-  /// ✅ เชื่อมต่อ BLE
+  /// ✅ เชื่อมต่อกับอุปกรณ์ BLE
   Future<void> _initBleConnection() async {
     setState(() => _connecting = true);
     try {
@@ -48,7 +49,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
         });
       });
 
-      // ✅ เริ่มตั้งเวลาบันทึกอัตโนมัติทุก 30 นาที
+      // ✅ เริ่มตั้งเวลาเก็บข้อมูลทุก 30 นาที
       _startAutoSave();
     } catch (e) {
       setState(() => _connecting = false);
@@ -58,15 +59,29 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
     }
   }
 
-  /// ✅ ตั้งเวลาให้บันทึกอัตโนมัติทุก 30 นาที
-  void _startAutoSave() {
-    _saveTimer?.cancel();
-    _saveTimer = Timer.periodic(const Duration(minutes: 30), (_) async {
-      await _saveData();
+  /// ✅ ตั้งเวลาให้บันทึกทุก 30 นาที
+  void _startAutoSave() async {
+    _saveTimer?.cancel(); // ป้องกัน Timer ซ้ำ
+
+    final settingsBox = await Hive.openBox('settings');
+    final lastSavedStr = settingsBox.get('lastSavedTime');
+    if (lastSavedStr != null) {
+      _lastSavedTime = DateTime.tryParse(lastSavedStr);
+    }
+
+    _saveTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
+      final now = DateTime.now();
+      if (_lastSavedTime == null ||
+          now.difference(_lastSavedTime!).inMinutes >= 30) {
+        await _saveData();
+        _lastSavedTime = now;
+        await settingsBox.put('lastSavedTime', now.toIso8601String());
+        setState(() {}); // เพื่ออัปเดตข้อความ "Last saved"
+      }
     });
   }
 
-  /// ✅ ฟังก์ชันบันทึกข้อมูล (ไม่ซ้ำวัน)
+  /// ✅ ฟังก์ชันบันทึกข้อมูล (ทุก 30 นาที)
   Future<void> _saveData() async {
     if (!_connected || _bpm == 0 || _temp == 0.0) return;
 
@@ -74,41 +89,24 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
     final now = DateTime.now();
     final todayKey = DateFormat('yyyy-MM-dd').format(now);
 
-    // 🔍 ตรวจว่ามีข้อมูลของวันนี้อยู่ไหม
+    // 🔍 ตรวจว่ามีข้อมูลของวันนี้หรือยัง
     final HistoryModel? existing = box.values.cast<HistoryModel?>().firstWhere(
       (item) => DateFormat('yyyy-MM-dd').format(item!.date) == todayKey,
       orElse: () => null,
     );
 
     if (existing != null) {
-      // 🔄 ถ้ามีแล้ว → อัปเดตข้อมูลแทน
       existing
         ..bpm = _bpm
         ..temperature = _temp
         ..date = now;
       await existing.save();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            "🔄 Updated today’s record — BPM: $_bpm, Temp: ${_temp.toStringAsFixed(1)} °C",
-          ),
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      debugPrint("🔄 Updated today's record — BPM: $_bpm, Temp: $_temp");
     } else {
-      // 🆕 ถ้ายังไม่มี ⇒ เพิ่มใหม่
       final record = HistoryModel(date: now, bpm: _bpm, temperature: _temp);
       await box.add(record);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            "💾 New record saved — BPM: $_bpm, Temp: ${_temp.toStringAsFixed(1)} °C",
-          ),
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      debugPrint("💾 New record saved — BPM: $_bpm, Temp: $_temp");
     }
 
     // 🧹 เก็บแค่ 7 วันล่าสุด
@@ -119,7 +117,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
     }
   }
 
-  /// ✅ ฟังก์ชันส่งคำสั่งไปยังอุปกรณ์ BLE
+  /// ✅ ฟังก์ชันส่งคำสั่ง BLE
   Future<void> _sendCommand(String cmd) async {
     try {
       await ble.sendCommand(cmd);
@@ -133,7 +131,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
     }
   }
 
-  /// ✅ ส่วนแสดงผล UI
+  /// ✅ UI
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -165,6 +163,12 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                     icon: const Icon(Icons.save),
                     label: const Text('Save Now'),
                   ),
+                  const SizedBox(height: 20),
+                  if (_lastSavedTime != null)
+                    Text(
+                      "🕒 Last saved: ${DateFormat('HH:mm:ss').format(_lastSavedTime!)}",
+                      style: const TextStyle(color: Colors.grey),
+                    ),
                 ],
               )
             : ElevatedButton(
@@ -175,7 +179,6 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
     );
   }
 
-  /// ✅ ยกเลิก Timer เมื่อออกจากหน้า
   @override
   void dispose() {
     _saveTimer?.cancel();
