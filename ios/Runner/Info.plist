@@ -49,14 +49,26 @@
 	<!-- 🔵 Bluetooth permission (iOS 13+) -->
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>This app uses Bluetooth to connect to your heart sensor (ESP32).</string>
-	<!-- เผื่อ iOS เก่ากว่า -->
+	<!-- 🔵 สำหรับ iOS เวอร์ชันเก่ากว่า -->
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>Bluetooth is required to read heart rate and temperature from your device.</string>
 
-	<!-- (ตัวเลือก) ทำงาน BLE เบื้องหลัง -->
+	<!-- 🔵 Background Bluetooth (optional) -->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>bluetooth-central</string>
 	</array>
+
+	<!-- 📸 กล้อง และ แกลเลอรี่ -->
+	<key>NSCameraUsageDescription</key>
+	<string>This app needs access to your camera to take a profile photo.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app needs access to your photo library to choose a profile picture.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>This app needs permission to save profile images to your photo library.</string>
+
+	<!-- 🔔 สำหรับ Notification -->
+	<key>NSUserNotificationUsageDescription</key>
+	<string>This app uses notifications to alert you about abnormal heart rate readings.</string>
 </dict>
 </plist>

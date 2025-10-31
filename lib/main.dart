@@ -12,11 +12,11 @@ import 'login_screen.dart';
 import 'signup_screen.dart';
 import 'summary_screen.dart';
 import 'ble/ble_manager.dart';
-import 'background_service.dart'; // ✅ Background Monitoring
+import 'background_service.dart';
+import 'utils/notification_service.dart';
+import 'database/local_db.dart';
+import 'edit_profile.dart';
 
-// ---------------------------------------------------------
-// 🚀 MAIN ENTRY POINT
-// ---------------------------------------------------------
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -29,10 +29,16 @@ Future<void> main() async {
   await Hive.openBox('settings');
   await Hive.openBox('session');
 
+  // ✅ Initialize LocalDB (ถ้ามี)
+  await LocalDB.init();
+
+  // ✅ เตรียมระบบแจ้งเตือน
+  await NotificationService.instance.init();
+
   // ✅ Initialize BLE Manager
   BleManager().init();
 
-  // ✅ ขอ Permission ก่อนเริ่ม Service (สำคัญมาก)
+  // ✅ ขอ Permission ทั้งหมด
   await _requestPermissions();
 
   // ✅ เริ่ม Background Service
@@ -42,7 +48,7 @@ Future<void> main() async {
 }
 
 // ---------------------------------------------------------
-// 🔐 ฟังก์ชันขอ Permission ทั้งหมด (Bluetooth, Location, Notification)
+// 🔐 ขอ Permission ทั้งหมด (Bluetooth, Location, Notification, Camera, Storage)
 // ---------------------------------------------------------
 Future<void> _requestPermissions() async {
   final statuses = await [
@@ -52,21 +58,27 @@ Future<void> _requestPermissions() async {
     Permission.locationWhenInUse,
     Permission.ignoreBatteryOptimizations,
     Permission.notification,
+    Permission.camera, // 📸 สำหรับถ่ายรูป
+    Permission.photos, // 🖼 สำหรับเลือกรูปจาก Gallery (iOS)
+    Permission.storage, // 💾 สำหรับ Android Gallery
   ].request();
 
-  // ⚠️ ถ้ามีสิทธิ์ที่ถูกปฏิเสธ
+  // ถ้ามีบางสิทธิ์ถูกปฏิเสธ
   if (statuses.values.any((status) => status.isDenied)) {
-    debugPrint('⚠️ Some permissions were denied.');
+    debugPrint('⚠️ Some permissions were denied by user.');
   }
 
-  // ✅ ถ้าผู้ใช้ปฏิเสธถาวร ให้เปิดหน้า Settings
+  // ถ้าผู้ใช้ปฏิเสธถาวร
   if (statuses.values.any((status) => status.isPermanentlyDenied)) {
+    debugPrint(
+      '⚠️ Some permissions permanently denied. Opening app settings...',
+    );
     await openAppSettings();
   }
 }
 
 // ---------------------------------------------------------
-// 💓 ตัวหลักของแอป
+// 💓 แอปหลัก
 // ---------------------------------------------------------
 class HeartSenseApp extends StatefulWidget {
   const HeartSenseApp({super.key});
@@ -86,7 +98,7 @@ class _HeartSenseAppState extends State<HeartSenseApp> {
 
   Future<void> _loadTheme() async {
     final box = await Hive.openBox('settings');
-    if (!mounted) return; // ✅ ป้องกัน setState หลัง widget ถูก dispose
+    if (!mounted) return;
     setState(() {
       _isDark = box.get('darkMode', defaultValue: false);
     });
@@ -101,7 +113,6 @@ class _HeartSenseAppState extends State<HeartSenseApp> {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ ธีมโหมดสว่าง
     final lightTheme = ThemeData(
       brightness: Brightness.light,
       fontFamily: 'SF Pro Display',
@@ -119,7 +130,6 @@ class _HeartSenseAppState extends State<HeartSenseApp> {
       ),
     );
 
-    // ✅ ธีมโหมดมืด
     final darkTheme = ThemeData(
       brightness: Brightness.dark,
       fontFamily: 'SF Pro Display',
@@ -136,7 +146,6 @@ class _HeartSenseAppState extends State<HeartSenseApp> {
       ),
     );
 
-    // ✅ Routing
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'HeartSense',
@@ -150,6 +159,7 @@ class _HeartSenseAppState extends State<HeartSenseApp> {
         '/profile': (context) => const ProfileScreen(),
         '/settings': (context) => SettingsScreen(onThemeChanged: _toggleTheme),
         '/summary': (context) => const SummaryScreen(),
+        '/edit_profile': (context) => const EditProfileScreen(),
       },
     );
   }

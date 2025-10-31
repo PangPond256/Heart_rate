@@ -1,22 +1,20 @@
-// lib/background_service.dart
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:audioplayers/audioplayers.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
-/// 🔔 ตัวแปรหลัก
+// 🔔 ตัวแปรหลัก
 final FlutterLocalNotificationsPlugin _notifications =
     FlutterLocalNotificationsPlugin();
 
-/// ✅ เริ่มต้น Background Service
 Future<void> initializeService() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
 
+  // Channel สำหรับ Service
   const AndroidNotificationChannel serviceChannel = AndroidNotificationChannel(
     'heart_monitor',
     'Heart Monitor Service',
@@ -24,10 +22,7 @@ Future<void> initializeService() async {
     importance: Importance.low,
   );
 
-  final FlutterLocalNotificationsPlugin notifications =
-      FlutterLocalNotificationsPlugin();
-
-  await notifications
+  await _notifications
       .resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin
       >()
@@ -37,7 +32,7 @@ Future<void> initializeService() async {
     android: AndroidInitializationSettings('@mipmap/ic_launcher'),
     iOS: DarwinInitializationSettings(),
   );
-  await notifications.initialize(initSettings);
+  await _notifications.initialize(initSettings);
 
   final service = FlutterBackgroundService();
   await service.configure(
@@ -71,9 +66,6 @@ void onStart(ServiceInstance service) async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
 
-  final player = AudioPlayer();
-  await player.setReleaseMode(ReleaseMode.stop);
-
   final settingsBox = await Hive.openBox('settings');
   final historyBox = await Hive.openBox('history');
 
@@ -83,6 +75,7 @@ void onStart(ServiceInstance service) async {
     lastSavedTime = DateTime.tryParse(savedTimeStr);
   }
 
+  // 🔔 Channel สำหรับ Alert
   const AndroidNotificationChannel alertChannel = AndroidNotificationChannel(
     'heart_alerts',
     'Heart Alerts',
@@ -90,7 +83,6 @@ void onStart(ServiceInstance service) async {
     importance: Importance.max,
     playSound: true,
     enableVibration: true,
-    sound: RawResourceAndroidNotificationSound('alert'),
   );
 
   await _notifications
@@ -98,6 +90,15 @@ void onStart(ServiceInstance service) async {
         AndroidFlutterLocalNotificationsPlugin
       >()
       ?.createNotificationChannel(alertChannel);
+
+  // 🔧 ตัวแปร latch ป้องกันแจ้งเตือนซ้ำ
+  bool hrAlertLatched = false;
+  int overCount = 0;
+  int underCount = 0;
+  const int HR_HIGH = 120;
+  const int HR_RESET = 100;
+  const int CONFIRM_OVER = 3;
+  const int CONFIRM_UNDER = 3;
 
   FlutterBluePlus.startScan(timeout: const Duration(seconds: 6));
 
@@ -138,65 +139,64 @@ void onStart(ServiceInstance service) async {
             final temp = double.tryParse(parts.length > 1 ? parts[1] : '') ?? 0;
             final now = DateTime.now();
 
-            // ✅ เงื่อนไขบันทึกทุก 30 นาที
+            // ✅ เฉลี่ยบันทึกทุก 30 นาที
             if (lastSavedTime == null ||
                 now.difference(lastSavedTime!).inMinutes >= 30) {
               lastSavedTime = now;
               await settingsBox.put('lastSavedTime', now.toIso8601String());
-
               await historyBox.add({
                 'timestamp': now.toIso8601String(),
                 'bpm': bpm,
                 'temp': temp,
               });
-
               debugPrint('💾 Saved at $now → BPM: $bpm, Temp: $temp');
-
-              await _notifications.show(
-                1,
-                '✅ Data Saved',
-                'Heart data recorded at ${now.hour}:${now.minute.toString().padLeft(2, '0')}',
-                const NotificationDetails(
-                  android: AndroidNotificationDetails(
-                    'heart_monitor',
-                    'Heart Monitor Service',
-                    importance: Importance.low,
-                    priority: Priority.low,
-                  ),
-                ),
-              );
             }
 
-            // ✅ ตรวจจับค่าผิดปกติ (เตือนทันที)
-            final notifyEnabled = settingsBox.get(
-              'notificationsEnabled',
-              defaultValue: true,
-            );
-            if (notifyEnabled && (bpm < 50 || bpm > 120)) {
-              await player.stop();
-              await player.play(AssetSource('sounds/alert.mp3'));
-              await _notifications.show(
-                0,
-                '⚠️ Abnormal Heart Rate',
-                'Heart rate: ${bpm.toStringAsFixed(1)} BPM — Temp: ${temp.toStringAsFixed(1)} °C',
-                const NotificationDetails(
-                  android: AndroidNotificationDetails(
-                    'heart_alerts',
-                    'Heart Alerts',
-                    channelDescription: 'Notification for abnormal heart rate',
-                    importance: Importance.max,
-                    priority: Priority.high,
-                    playSound: true,
-                    enableVibration: true,
-                    sound: RawResourceAndroidNotificationSound('alert'),
-                  ),
-                  iOS: DarwinNotificationDetails(
-                    presentSound: true,
-                    presentAlert: true,
-                    presentBadge: true,
-                  ),
-                ),
-              );
+            // ✅ แจ้งเตือน HR สูงเพียงครั้งเดียว
+            if (!hrAlertLatched) {
+              if (bpm >= HR_HIGH) {
+                overCount++;
+                underCount = 0;
+                if (overCount >= CONFIRM_OVER) {
+                  hrAlertLatched = true;
+                  overCount = 0;
+                  await _notifications.show(
+                    10,
+                    '⚠️ Heart Rate Too High',
+                    'หัวใจเต้นเร็ว $bpm BPM (เกิน 120)',
+                    const NotificationDetails(
+                      android: AndroidNotificationDetails(
+                        'heart_alerts',
+                        'Heart Alerts',
+                        channelDescription:
+                            'Notification for high heart rate alert',
+                        importance: Importance.max,
+                        priority: Priority.high,
+                        playSound: true,
+                        enableVibration: true,
+                      ),
+                      iOS: DarwinNotificationDetails(
+                        presentSound: true,
+                        presentAlert: true,
+                      ),
+                    ),
+                  );
+                }
+              } else {
+                overCount = 0;
+              }
+            } else {
+              // ✅ Reset เมื่อกลับมาปกติ
+              if (bpm < HR_RESET) {
+                underCount++;
+                if (underCount >= CONFIRM_UNDER) {
+                  hrAlertLatched = false;
+                  underCount = 0;
+                  debugPrint('🟢 Heart rate back to normal');
+                }
+              } else {
+                underCount = 0;
+              }
             }
           } catch (e) {
             debugPrint('⚠️ Parse error: $e');

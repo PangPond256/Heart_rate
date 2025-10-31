@@ -34,7 +34,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _doLogin() async {
-    FocusScope.of(context).unfocus(); // ปิดคีย์บอร์ด
+    FocusScope.of(context).unfocus();
     final messenger = ScaffoldMessenger.of(context);
 
     if (!_formKey.currentState!.validate()) return;
@@ -44,7 +44,6 @@ class _LoginScreenState extends State<LoginScreen> {
       final uname = _username.text.trim();
       final pwd = _password.text.trim();
 
-      // 🔍 หา user จาก Hive
       final user = _userBox.values.firstWhere(
         (u) => u.username == uname && u.password == pwd,
         orElse: () => UserModel(
@@ -58,7 +57,6 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
 
-      // ❌ ไม่พบผู้ใช้
       if (user.username.isEmpty) {
         messenger.showSnackBar(
           const SnackBar(content: Text('Invalid username or password')),
@@ -66,14 +64,12 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      // ✅ เก็บ session สำหรับผู้ใช้ปัจจุบัน
       await _sessionBox.put('currentUsername', user.username);
 
       messenger.showSnackBar(
         const SnackBar(content: Text('Signed in successfully')),
       );
 
-      // ✅ ไปหน้า Dashboard
       if (!mounted) return;
       Navigator.pushReplacementNamed(context, '/dashboard', arguments: user);
     } catch (e) {
@@ -85,8 +81,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFFFFFFF),
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 48),
@@ -94,18 +93,21 @@ class _LoginScreenState extends State<LoginScreen> {
             key: _formKey,
             child: Column(
               children: [
-                const Text(
+                Text(
                   'SmartHealth',
                   style: TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E3A8A),
+                    color: colorScheme.primary,
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'Welcome back',
-                  style: TextStyle(color: Colors.grey, fontSize: 16),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface.withOpacity(0.7),
+                    fontSize: 16,
+                  ),
                 ),
                 const SizedBox(height: 28),
 
@@ -113,10 +115,13 @@ class _LoginScreenState extends State<LoginScreen> {
                 TextFormField(
                   controller: _username,
                   textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Username',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person_outline),
+                    border: const OutlineInputBorder(),
+                    prefixIcon: Icon(
+                      Icons.person_outline,
+                      color: colorScheme.primary,
+                    ),
                   ),
                   validator: (v) =>
                       (v == null || v.trim().isEmpty) ? 'Required' : null,
@@ -133,11 +138,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   decoration: InputDecoration(
                     labelText: 'Password',
                     border: const OutlineInputBorder(),
-                    prefixIcon: const Icon(Icons.lock_outline),
+                    prefixIcon: Icon(
+                      Icons.lock_outline,
+                      color: colorScheme.primary,
+                    ),
                     suffixIcon: IconButton(
                       onPressed: () => setState(() => _obscure = !_obscure),
                       icon: Icon(
                         _obscure ? Icons.visibility : Icons.visibility_off,
+                        color: colorScheme.primary,
                       ),
                     ),
                   ),
@@ -152,7 +161,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _doLogin,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1E3A8A),
+                      backgroundColor: colorScheme.primary,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
@@ -185,10 +194,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       ? null
                       : () =>
                             Navigator.pushReplacementNamed(context, '/signup'),
-                  child: const Text(
+                  child: Text(
                     "Don't have an account? Sign up",
                     style: TextStyle(
-                      color: Color(0xFF1E3A8A),
+                      color: colorScheme.primary,
                       fontWeight: FontWeight.w600,
                     ),
                   ),

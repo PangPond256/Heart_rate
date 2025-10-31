@@ -1,5 +1,8 @@
+// 📁 lib/signup_screen.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
+import 'package:image_picker/image_picker.dart';
 import 'models/user_model.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -21,6 +24,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
   bool _obscure = true;
   late final Box<UserModel> _userBox;
+  File? _profileImage;
 
   @override
   void initState() {
@@ -39,6 +43,18 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
+  // ✅ ฟังก์ชันเลือกภาพจาก Gallery
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery);
+    if (picked != null) {
+      setState(() {
+        _profileImage = File(picked.path);
+      });
+    }
+  }
+
+  // ✅ ฟังก์ชันสมัครสมาชิก
   Future<void> _doSignup() async {
     final messenger = ScaffoldMessenger.of(context);
     if (!_formKey.currentState!.validate()) return;
@@ -54,17 +70,28 @@ class _SignupScreenState extends State<SignupScreen> {
       return;
     }
 
+    // ✅ สร้าง user object
     final user = UserModel(
       username: uname,
-      password: _password.text, // สำหรับโปรดักชันควรแฮชรหัสผ่าน
+      password: _password.text, // โปรดักชันควรแฮชรหัสผ่าน
       name: _name.text.trim(),
       age: int.tryParse(_age.text.trim()) ?? 0,
       gender: _gender,
       weight: double.tryParse(_weight.text.trim()) ?? 0,
       height: double.tryParse(_height.text.trim()) ?? 0,
+      // ถ้า UserModel ของคุณยังไม่มี field สำหรับรูป
+      // สามารถเพิ่ม field เช่น `String? imagePath;`
+      // แล้วใช้ imagePath: _profileImage?.path
     );
 
     await _userBox.add(user);
+
+    // ✅ บันทึก path รูปโปรไฟล์ลง Hive Box แยก
+    final settingsBox = await Hive.openBox('settings');
+    if (_profileImage != null) {
+      await settingsBox.put('profileImage', _profileImage!.path);
+    }
+
     messenger.showSnackBar(
       const SnackBar(content: Text('Account created. Please sign in.')),
     );
@@ -83,6 +110,36 @@ class _SignupScreenState extends State<SignupScreen> {
           key: _formKey,
           child: Column(
             children: [
+              // 👤 Profile Picture (Optional)
+              GestureDetector(
+                onTap: _pickImage,
+                child: CircleAvatar(
+                  radius: 55,
+                  backgroundColor: const Color(0xFFE5E7EB),
+                  backgroundImage: _profileImage != null
+                      ? FileImage(_profileImage!)
+                      : const AssetImage('assets/images/default_user.png')
+                            as ImageProvider,
+                  child: _profileImage == null
+                      ? const Icon(
+                          Icons.camera_alt,
+                          size: 32,
+                          color: Colors.grey,
+                        )
+                      : null,
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextButton(
+                onPressed: _pickImage,
+                child: const Text(
+                  'Choose Profile Picture',
+                  style: TextStyle(color: Color(0xFF1E3A8A)),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
               // Username
               TextFormField(
                 controller: _username,
@@ -150,7 +207,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      initialValue: _gender,
+                      value: _gender,
                       decoration: const InputDecoration(
                         labelText: 'Gender',
                         border: OutlineInputBorder(),
@@ -217,7 +274,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   child: const Text(
                     'Create Account',
                     style: TextStyle(
-                      color: Colors.white, // ✅ บังคับสีตัวอักษร
+                      color: Colors.white,
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                     ),

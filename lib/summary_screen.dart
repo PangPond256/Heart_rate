@@ -23,9 +23,8 @@ class _SummaryScreenState extends State<SummaryScreen> {
     _loadSummaries();
   }
 
-  // ---------- Safe converters ----------
   double _toDouble(dynamic v) {
-    if (v is num) return v.toDouble(); // int/double → double
+    if (v is num) return v.toDouble();
     try {
       return double.parse(v.toString());
     } catch (_) {
@@ -39,7 +38,6 @@ class _SummaryScreenState extends State<SummaryScreen> {
     return list.reduce((a, b) => a + b) / list.length;
   }
 
-  // ---------- Load & aggregate ----------
   Future<void> _loadSummaries() async {
     final box = Hive.box<HistoryModel>('history');
     final allData = box.values.toList();
@@ -49,7 +47,6 @@ class _SummaryScreenState extends State<SummaryScreen> {
       return;
     }
 
-    // Group by day
     final Map<String, List<HistoryModel>> byDay = {};
     for (final d in allData) {
       final key = DateFormat('yyyy-MM-dd').format(d.date);
@@ -62,7 +59,6 @@ class _SummaryScreenState extends State<SummaryScreen> {
       return DailySummary(date: e.key, avgBpm: avgBpm, avgTemp: avgTemp);
     }).toList();
 
-    // Group by week
     final Map<String, List<DailySummary>> byWeek = {};
     for (final d in daily) {
       final weekLabel = _getWeekLabel(DateTime.parse(d.date));
@@ -89,25 +85,21 @@ class _SummaryScreenState extends State<SummaryScreen> {
     });
   }
 
-  // ---------- Insight & status ----------
   String _generateHealthInsight(List<DailySummary> data) {
     if (data.isEmpty) return "No health data available yet.";
 
     final last = data.last;
+    final avgBpm = _average(data.map((e) => e.avgBpm));
+    final avgTemp = _average(data.map((e) => e.avgTemp));
 
-    // ✅ คำนวณค่าเฉลี่ย (ปลอด error และ type ปลอดภัย)
-    final avgBpm = _average(data.map<double>((e) => e.avgBpm));
-    final avgTemp = _average(data.map<double>((e) => e.avgTemp));
-
-    // ✅ วิเคราะห์เทียบกับค่าเฉลี่ยที่แท้จริง
     if (last.avgTemp > avgTemp + 0.5 && last.avgBpm > avgBpm + 10) {
-      return "💬 Your heart rate and temperature are higher than normal — you may be fatigued or have a mild fever. Get rest and stay hydrated.";
-    } else if (last.avgBpm > avgBpm + 15 && last.avgTemp <= avgTemp + 0.2) {
-      return "💬 Your heart rate is elevated but your temperature is normal — could be due to stress or lack of sleep.";
+      return "💬 Heart rate & temperature are higher than usual — possible fatigue or mild fever.";
+    } else if (last.avgBpm > avgBpm + 15) {
+      return "💬 Elevated heart rate — may indicate stress or lack of rest.";
     } else if (last.avgBpm < avgBpm - 15 && last.avgTemp < avgTemp - 0.5) {
-      return "💬 Both your heart rate and temperature are lower than usual — if you feel dizzy, consult a doctor.";
+      return "💬 Both metrics are low — rest and hydrate properly.";
     } else {
-      return "💬 Everything looks healthy 👍 Keep maintaining good habits!";
+      return "💬 Everything looks stable and healthy 👍";
     }
   }
 
@@ -118,8 +110,8 @@ class _SummaryScreenState extends State<SummaryScreen> {
   }
 
   Color _statusColor(String status) {
-    if (status.contains("Excellent")) return Colors.green;
-    if (status.contains("Normal")) return Colors.orange;
+    if (status.contains("Excellent")) return Colors.greenAccent;
+    if (status.contains("Normal")) return Colors.orangeAccent;
     return Colors.redAccent;
   }
 
@@ -128,23 +120,26 @@ class _SummaryScreenState extends State<SummaryScreen> {
     return "Week $weekNumber (${DateFormat('MMM yyyy').format(date)})";
   }
 
-  // ---------- UI ----------
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     return Scaffold(
       drawer: const MainDrawer(),
       appBar: AppBar(
         title: const Text("Health Summary"),
-        backgroundColor: theme.colorScheme.surface,
-        foregroundColor: theme.colorScheme.primary,
+        backgroundColor: colorScheme.surface,
+        foregroundColor: colorScheme.primary,
         elevation: 0.5,
       ),
-      body: Container(
-        decoration: const BoxDecoration(
+      body: AnimatedContainer(
+        duration: const Duration(milliseconds: 400),
+        decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFFE0F7FA), Color(0xFFFFFFFF)],
+            colors: theme.brightness == Brightness.dark
+                ? [const Color(0xFF0F172A), const Color(0xFF1E293B)]
+                : [const Color(0xFFE0F2FE), Colors.white],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -154,11 +149,12 @@ class _SummaryScreenState extends State<SummaryScreen> {
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  _overallCard(),
+                  _overallCard(theme),
                   const SizedBox(height: 12),
-                  _insightCard(),
-                  const SizedBox(height: 20),
-                  _sectionHeader("📅 Daily Summary"),
+                  _insightCard(theme),
+                  const SizedBox(height: 24),
+                  _sectionHeader("📅 Daily Summary", theme),
+                  const SizedBox(height: 8),
                   ..._daily.map(
                     (d) => _summaryCard(
                       title: DateFormat(
@@ -166,16 +162,19 @@ class _SummaryScreenState extends State<SummaryScreen> {
                       ).format(DateTime.parse(d.date)),
                       bpm: d.avgBpm,
                       temp: d.avgTemp,
+                      theme: theme,
                     ),
                   ),
                   const SizedBox(height: 20),
-                  _sectionHeader("📆 Weekly Summary"),
+                  _sectionHeader("📆 Weekly Summary", theme),
+                  const SizedBox(height: 8),
                   ..._weekly.map(
                     (w) => _summaryCard(
                       title: w.week,
                       bpm: w.avgBpm,
                       temp: w.avgTemp,
                       status: w.healthStatus,
+                      theme: theme,
                     ),
                   ),
                 ],
@@ -184,38 +183,85 @@ class _SummaryScreenState extends State<SummaryScreen> {
     );
   }
 
-  Widget _overallCard() {
+  Widget _overallCard(ThemeData theme) {
     if (_daily.isEmpty) return const SizedBox();
     final avgBpm = _average(_daily.map((e) => e.avgBpm));
     final avgTemp = _average(_daily.map((e) => e.avgTemp));
     final status = _evaluateHealth(avgBpm, avgTemp);
 
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF14B8A6), Color(0xFF0D9488)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.teal.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Overall Health 💚",
+            style: TextStyle(color: Colors.white, fontSize: 20),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            "💓 Avg BPM: ${avgBpm.toStringAsFixed(1)}",
+            style: const TextStyle(color: Colors.white, fontSize: 16),
+          ),
+          Text(
+            "🌡️ Avg Temp: ${avgTemp.toStringAsFixed(1)} °C",
+            style: const TextStyle(color: Colors.white, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "💬 Status: $status",
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _insightCard(ThemeData theme) {
+    final colorScheme = theme.colorScheme;
     return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      color: Colors.teal[600],
-      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      color: colorScheme.surface,
+      elevation: theme.brightness == Brightness.dark ? 0 : 4,
       child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
+        padding: const EdgeInsets.all(18),
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              "Overall Health Summary 💚",
-              style: TextStyle(color: Colors.white, fontSize: 18),
+            Icon(
+              Icons.insights,
+              color: colorScheme.primary.withValues(alpha: 0.9),
+              size: 32,
             ),
-            const SizedBox(height: 10),
-            Text(
-              "💓 Avg BPM: ${avgBpm.toStringAsFixed(1)}",
-              style: const TextStyle(color: Colors.white, fontSize: 16),
-            ),
-            Text(
-              "🌡️ Avg Temp: ${avgTemp.toStringAsFixed(1)} °C",
-              style: const TextStyle(color: Colors.white, fontSize: 16),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              "💬 Status: $status",
-              style: const TextStyle(color: Colors.white, fontSize: 16),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                _insight,
+                style: TextStyle(
+                  fontSize: 15,
+                  color: colorScheme.onSurface,
+                  height: 1.4,
+                ),
+              ),
             ),
           ],
         ),
@@ -223,36 +269,14 @@ class _SummaryScreenState extends State<SummaryScreen> {
     );
   }
 
-  Widget _insightCard() => Card(
-    color: Colors.white,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-    elevation: 3,
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.insights, color: Colors.teal, size: 30),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              _insight,
-              style: const TextStyle(fontSize: 15, height: 1.4),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-
-  Widget _sectionHeader(String text) => Padding(
+  Widget _sectionHeader(String text, ThemeData theme) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 6),
     child: Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 18,
         fontWeight: FontWeight.bold,
-        color: Color(0xFF1E3A8A),
+        color: theme.colorScheme.primary,
       ),
     ),
   );
@@ -262,25 +286,56 @@ class _SummaryScreenState extends State<SummaryScreen> {
     required double bpm,
     required double temp,
     String? status,
+    required ThemeData theme,
   }) {
-    return Card(
-      elevation: 2,
-      color: Colors.white,
+    final colorScheme = theme.colorScheme;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
       margin: const EdgeInsets.symmetric(vertical: 6),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: theme.brightness == Brightness.dark
+            ? []
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+      ),
       child: ListTile(
-        leading: const Icon(Icons.favorite, color: Colors.redAccent),
+        leading: CircleAvatar(
+          radius: 22,
+          backgroundColor: colorScheme.primary.withValues(alpha: 0.15),
+          child: Icon(
+            Icons.favorite,
+            color: colorScheme.primary.withValues(alpha: 0.9),
+          ),
+        ),
         title: Text(
           title,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 16,
+            color: colorScheme.onSurface,
+          ),
         ),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("💓 ${bpm.toStringAsFixed(1)} bpm"),
-              Text("🌡️ ${temp.toStringAsFixed(1)} °C"),
+              Text(
+                "💓 ${bpm.toStringAsFixed(1)} bpm",
+                style: TextStyle(color: colorScheme.onSurface),
+              ),
+              Text(
+                "🌡️ ${temp.toStringAsFixed(1)} °C",
+                style: TextStyle(color: colorScheme.onSurface),
+              ),
               if (status != null)
                 Text(
                   "💬 $status",
@@ -297,7 +352,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
   }
 }
 
-// ---------- Helper data classes ----------
+// ---------- Data Models ----------
 class DailySummary {
   final String date;
   final double avgBpm;
