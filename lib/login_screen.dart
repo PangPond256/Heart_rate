@@ -57,7 +57,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
 
-      if (user.username.isEmpty) {
+      if (user.username?.isEmpty ?? true) {
         messenger.showSnackBar(
           const SnackBar(content: Text('Invalid username or password')),
         );

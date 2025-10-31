@@ -17,13 +17,13 @@ class UserModelAdapter extends TypeAdapter<UserModel> {
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
     return UserModel(
-      username: fields[0] as String,
-      password: fields[1] as String,
-      name: fields[2] as String,
-      age: fields[3] as int,
-      gender: fields[4] as String,
-      weight: fields[5] as double,
-      height: fields[6] as double,
+      username: fields[0] as String?,
+      password: fields[1] as String?,
+      name: fields[2] as String?,
+      age: fields[3] as int?,
+      gender: fields[4] as String?,
+      weight: fields[5] as double?,
+      height: fields[6] as double?,
     );
   }
 

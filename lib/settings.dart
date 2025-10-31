@@ -322,10 +322,13 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       ),
     );
 
-    if (user.username.isEmpty) {
-      messenger.showSnackBar(const SnackBar(content: Text('User not found')));
+    if (user.username?.isEmpty ?? true) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Invalid username or password')),
+      );
       return;
     }
+
 
     if (user.password != _oldPwd.text.trim()) {
       messenger.showSnackBar(

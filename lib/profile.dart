@@ -29,17 +29,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadSavedImage();
   }
 
-  // ✅ โหลดข้อมูลผู้ใช้
   Future<void> _loadUserData() async {
     final box = Hive.box<UserModel>('users');
     if (box.isNotEmpty && mounted) {
-      setState(() {
-        _user = box.getAt(0);
-      });
+      setState(() => _user = box.getAt(0));
     }
   }
 
-  // ✅ โหลดข้อมูลสุขภาพล่าสุด
   Future<void> _loadLatestData() async {
     final box = Hive.box<HistoryModel>('history');
     if (box.isNotEmpty && mounted) {
@@ -51,18 +47,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // ✅ โหลดรูปโปรไฟล์ที่เคยบันทึก
   Future<void> _loadSavedImage() async {
     final box = await Hive.openBox('settings');
     final path = box.get('profileImage');
     if (path != null && File(path).existsSync() && mounted) {
-      setState(() {
-        _profileImage = File(path);
-      });
+      setState(() => _profileImage = File(path));
     }
   }
 
-  // ✅ เลือกรูปโปรไฟล์ใหม่ (พร้อมขอ Permission)
   Future<void> _pickImage() async {
     final status = await Permission.photos.request();
     if (!status.isGranted) {
@@ -96,14 +88,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         elevation: 0.5,
       ),
       drawer: const MainDrawer(),
-
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 👤 รูปโปรไฟล์
               GestureDetector(
                 onTap: _pickImage,
                 child: CircleAvatar(
@@ -125,7 +115,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   style: TextStyle(color: colorScheme.primary),
                 ),
               ),
-
               const SizedBox(height: 8),
               Text(
                 _user?.name ?? 'Guest User',
@@ -135,14 +124,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   color: colorScheme.primary,
                 ),
               ),
-
               const SizedBox(height: 30),
               Divider(
                 thickness: 1.2,
                 color: theme.dividerColor.withValues(alpha: 0.3),
               ),
 
-              // ❤️ ข้อมูลสุขภาพล่าสุด
+              // ❤️ HEALTH DATA
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Row(
@@ -167,10 +155,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                 ),
               ),
+              const SizedBox(height: 25),
+
+              // 🧍 PERSONAL INFO
+              _buildInfoSection(theme),
 
               const SizedBox(height: 35),
 
-              // 🔗 ปุ่มควบคุม BLE
+              // 🔗 BLE BUTTON
               ElevatedButton.icon(
                 onPressed: () async {
                   try {
@@ -193,8 +185,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 label: const Text('Manage BLE Connection'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: colorScheme.primary,
-                  foregroundColor:
-                      colorScheme.onPrimary, // ✅ แก้ข้อความมองเห็นได้
+                  foregroundColor: colorScheme.onPrimary,
                   minimumSize: const Size(double.infinity, 50),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -204,7 +195,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
               const SizedBox(height: 15),
 
-              // ✏️ ปุ่มแก้ไขข้อมูล
+              // ✏️ EDIT BUTTON
               OutlinedButton.icon(
                 onPressed: () {
                   if (!mounted) return;
@@ -232,7 +223,58 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // ✅ Card แสดงค่าชีพจรและอุณหภูมิ
+  // ✅ แสดงข้อมูลส่วนตัว (ไม่มีอีเมลและเบอร์)
+  Widget _buildInfoSection(ThemeData theme) {
+    final textColor = theme.colorScheme.onSurface;
+    final info = [
+      {
+        'label': 'Age',
+        'value': _user != null && _user!.age != null
+            ? _user!.age.toString()
+            : '—',
+      },
+      {'label': 'Gender', 'value': _user?.gender ?? '—'},
+      {
+        'label': 'Height',
+        'value': _user?.height != null ? '${_user!.height} cm' : '—',
+      },
+      {
+        'label': 'Weight',
+        'value': _user?.weight != null ? '${_user!.weight} kg' : '—',
+      },
+    ];
+
+    return Column(
+      children: info
+          .map(
+            (item) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    item['label']!,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: textColor.withValues(alpha: 0.8),
+                    ),
+                  ),
+                  Text(
+                    item['value']!,
+                    style: TextStyle(
+                      color: textColor,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  // ✅ Card สุขภาพ
   Widget _buildHealthCard({
     required IconData icon,
     required Color color,

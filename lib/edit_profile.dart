@@ -16,6 +16,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _weight = TextEditingController();
   final _height = TextEditingController();
   String _gender = 'Male';
+
   late final Box<UserModel> _userBox;
 
   @override
@@ -25,19 +26,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _loadUserData();
   }
 
+  // ✅ โหลดข้อมูลจาก Hive (ป้องกัน null ปลอดภัย)
   void _loadUserData() {
     if (_userBox.isNotEmpty) {
       final user = _userBox.getAt(0);
       if (user != null) {
-        _name.text = user.name;
-        _age.text = user.age.toString();
-        _gender = user.gender;
-        _weight.text = user.weight.toString();
-        _height.text = user.height.toString();
+        _name.text = user.name ?? '';
+        _age.text = user.age != null ? user.age.toString() : '';
+        _gender = user.gender ?? 'Male';
+        _weight.text = user.weight != null ? user.weight.toString() : '';
+        _height.text = user.height != null ? user.height.toString() : '';
       }
     }
   }
 
+  // ✅ บันทึกการเปลี่ยนแปลง
   Future<void> _saveChanges() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -47,10 +50,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         username: user.username,
         password: user.password,
         name: _name.text.trim(),
-        age: int.tryParse(_age.text) ?? 0,
+        age: int.tryParse(_age.text),
         gender: _gender,
-        weight: double.tryParse(_weight.text) ?? 0,
-        height: double.tryParse(_height.text) ?? 0,
+        weight: double.tryParse(_weight.text),
+        height: double.tryParse(_height.text),
       );
 
       await _userBox.putAt(0, updatedUser);
@@ -60,7 +63,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         const SnackBar(content: Text('Profile updated successfully!')),
       );
 
-      Navigator.pop(context); // 🔙 กลับไปหน้า Profile
+      Navigator.pop(context);
     }
   }
 

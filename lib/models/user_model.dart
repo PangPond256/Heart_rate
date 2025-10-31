@@ -5,33 +5,33 @@ part 'user_model.g.dart';
 @HiveType(typeId: 0)
 class UserModel extends HiveObject {
   @HiveField(0)
-  String username;
+  String? username;
 
   @HiveField(1)
-  String password;
+  String? password;
 
   @HiveField(2)
-  String name;
+  String? name;
 
   @HiveField(3)
-  int age;
+  int? age;
 
   @HiveField(4)
-  String gender;
+  String? gender;
 
   @HiveField(5)
-  double weight;
+  double? weight;
 
   @HiveField(6)
-  double height;
+  double? height;
 
   UserModel({
-    required this.username,
-    required this.password,
-    required this.name,
-    required this.age,
-    required this.gender,
-    required this.weight,
-    required this.height,
+    this.username,
+    this.password,
+    this.name,
+    this.age,
+    this.gender,
+    this.weight,
+    this.height,
   });
 }
