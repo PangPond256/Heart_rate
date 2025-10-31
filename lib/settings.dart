@@ -329,7 +329,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       return;
     }
 
-
     if (user.password != _oldPwd.text.trim()) {
       messenger.showSnackBar(
         const SnackBar(content: Text('Old password is incorrect')),
