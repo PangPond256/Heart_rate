@@ -2,11 +2,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'models/user_model.dart';
 import 'models/history_model.dart';
 import 'drawer.dart';
 import 'ble/ble_manager.dart';
+import 'utils/permissions.dart'; // ✅ เพิ่มตรงนี้
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -55,9 +55,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  /// ✅ ฟังก์ชันเลือกรูปจากแกลเลอรี (รองรับ Android 13+)
   Future<void> _pickImage() async {
-    final status = await Permission.photos.request();
-    if (!status.isGranted) {
+    final granted =
+        await ensureGalleryPermission(); // ✅ ใช้จาก permissions.dart
+    if (!granted) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Permission denied to access gallery.')),
@@ -67,10 +69,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: ImageSource.gallery);
+
     if (picked != null && mounted) {
       final box = await Hive.openBox('settings');
       await box.put('profileImage', picked.path);
       setState(() => _profileImage = File(picked.path));
+      debugPrint('📸 Image saved: ${picked.path}');
     }
   }
 
@@ -223,15 +227,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // ✅ แสดงข้อมูลส่วนตัว (ไม่มีอีเมลและเบอร์)
+  // ✅ ข้อมูลส่วนตัว
   Widget _buildInfoSection(ThemeData theme) {
     final textColor = theme.colorScheme.onSurface;
     final info = [
       {
         'label': 'Age',
-        'value': _user != null && _user!.age != null
-            ? _user!.age.toString()
-            : '—',
+        'value': _user?.age != null ? _user!.age.toString() : '—',
       },
       {'label': 'Gender', 'value': _user?.gender ?? '—'},
       {
@@ -274,7 +276,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // ✅ Card สุขภาพ
+  // ✅ การ์ดสุขภาพ
   Widget _buildHealthCard({
     required IconData icon,
     required Color color,
